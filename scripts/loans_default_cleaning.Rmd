@@ -1,0 +1,32 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+```
+
+```{r}
+# loading data
+loan_data <- read_csv("data/lending_club_loans.csv")
+grades <- read_csv("data/grade_info.csv")
+states_info <- read_csv("data/state_names_info.csv")
+```
+
+```{r}
+# investigating data
+glimpse(loan_data)
+glimpse(grades)
+glimpse(states_info)
+```
+
+```{r}
+# joining df's
+loan_data <- loan_data %>% 
+  rename(state_abb = addr_state) %>% 
+  left_join(states_info, by = "state_abb") %>% 
+  left_join(grades, by = "sub_grade")
+```
+
