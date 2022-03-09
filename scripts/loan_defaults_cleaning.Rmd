@@ -33,24 +33,44 @@ loans %>%
  summarise(across(.fns = ~ sum(is.na(.x))))
 
 # removing vars with no predictive power and vars that are all na's
+# all bar 1 record had a payment plan, so removing var
 loan_trim <- loans %>% 
-  select(-c("id", "member_id", "desc", "title", "url")) %>% 
+  select(-c("id", "member_id", "desc", "title", "url", "application_type",
+            "delinq_amnt", "tax_liens", "acc_now_delinq", "chargeoff_within_12_mths",
+            "policy_code", "collections_12_mths_ex_med", "last_fico_range_low",
+            "last_fico_range_high", "next_pymnt_d", "last_credit_pull_d",
+            "last_pymnt_d", "last_pymnt_amnt", "initial_list_status", 
+            "mths_since_last_record", "fico_range_high", "state_abb", "zip_code",
+            "pymnt_plan")) %>% 
   select_if(~ !all(is.na(.))) %>% 
-  filter(!is.na(loan_amnt))
+  filter(!is.na(c("loan_amnt", "annual_inc", 
+                  "earliest_cr_line", "delin1_2yrs", 
+                  "total_acc", "inq_last_6mths"))) %>% 
+  mutate()
 
+loans %>% 
+  distinct(emp_length)
+
+loans %>% 
+  select(emp_length) %>% 
+  mutate(emp_length = str_remove_all(emp_length, "[a-z]")) # [^[:alnum:]]+
+
+!is.na(annual_inc),
+         !is.na(earliest_cr_line), !is.na(delin1_2yrs), 
+         !is.na(total_acc), !is.na)
+
+rm(loan_trim)
 loan_trim %>% 
  summarise(across(.fns = ~ sum(is.na(.x))))
 
-  
+loan_trim %>% 
+  count(pymnt_plan)
 #loan_data_on_ramp <- loan_data %>% 
 #  select(-c("verification", "loan_status", ""))
-
-
 ```
 
 ```{r}
 # new col, loan status flag
-
 loan_trim <- loan_trim %>% 
   mutate(loan_status_flag = if_else(
     loan_status %in% c("Charged Off",
@@ -59,40 +79,34 @@ loan_trim <- loan_trim %>%
                        "Late (16-30 days)",
                        "Default"), 1, 0), 
     .after = loan_status)
-
 ```
 
 ```{r}
-# looking at volume within loan status catagories
+# looking at volume within loan status categories
 loan_trim %>% 
   ggplot() +
   aes(y = loan_status) +
   geom_bar()
 
-loan_data %>% 
+loans %>% 
   group_by(loan_status) %>% 
   count(loan_status, sort = T) 
 ```
-
-
-
 
 ```{r}
 library(caret)
 library(GGally)
 
-# correlaction matrix
-
-loan_data %>% 
+# correlation matrix
+loan_trim %>% 
   select(c(inq_last_6mths, loan_amnt, loan_status_flag, fico_range_low, fico_range_high)) %>% 
   ggcorr(label = T, layout.exp = 1)
 
 # scaling data 
-
-loan_data_scaled <- as.data.frame(scale(loan_data))
+loan_data_scaled <- as.data.frame(scale(loan_trim))
 
 mod1 <- glm(loan_status_flag ~ inq_last_6mths,
-            data = loan_data,
+            data = loan_trim,
             family = binomial((link = "logit")))
 
 summary(mod1)
