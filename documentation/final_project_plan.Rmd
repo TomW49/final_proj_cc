@@ -1,0 +1,127 @@
+---
+title: "Final project documentation template - PDA"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    pdf_document: default
+  word_document:
+    toc: yes
+---
+
+### Data Requirements
+
+The data used for my project meets the following requirements:
+
+-   At least 5,000 rows: **42,538 rows**
+-   At least 3 sources of data: `grade_info.csv`, `lending_club_loans.csv`, `state_names_info.csv`
+-   Must contain text data, numeric data and dates: `emp_title`(chr), `loan_amnt`(dbl), `issue_d`(dbl)
+
+<br>
+
+# Context
+
+#### Business intelligence and data-driven decision making
+
+Due to the nature of the business and the business question asked the analysis can provide instant actionable insights. The end product describes a typical profile of a customer who may likely default on their loan payments and by proxy this will provide profiles of *safer* customers likely to pay back any money received. This will ultimately allow the business to prevent any profit loss while simultaneously maximising profit from reliable customers.
+
+#### Domain knowledge and the business context
+
+Below is the brief provided, which acts as the basis of the project.
+
+> "You've been hired by LendingClub, an online loan provider to help with some problems their business has been facing. <br> <br>They are concerned about the default rate on their loans. They want to understand who is likely to default and who they should lend to in the future."
+
+Extracted from this, my main effort is onefold - provide evidence that highlights the customer profile of those most likely to default on their loan as provided by LendingClub.
+
+## Data
+
+#### Internal and external data sources
+
+-   `grade_info.csv`: Internal, provides information regarding LendingClubs customer grading
+-   `lending_club_loans.csv`:  Internal, is the main data set, contains all information regarding the business and it's customers
+-   `state_names_info.csv`: External, provides full names of abbreviated state names that are found in the main data set
+
+#### Types of data
+
+What kind of data did you work with? E.g. categorical and numerical data and their sub-types.
+
+Within the data set, predominant data types and examples are as follows:
+
+| Variable            | Type        | Sub-type | Example Data |
+|---------------------|-------------|----------|--------------|
+| loan_amnt           | Numerical   | dbl      | 7500         |
+| payment_plan        | Categorical | chr      | y            |
+| initial_list_status | Boolean     | lgl      | FALSE        |
+| issue_d             | Date        | chr      | Dec-2011     |
+
+#### Data formats
+
+The data formats used were flat files as provided by the organisation.
+
+#### Data quality and bias
+
+Briefly describe the quality of the data and whether you have any reasons to suggest the data is biased e.g. only data from a specific demographic even though a broader demographic would be of interest to the organisation.
+
+
+
+# Ethics
+
+#### Ethical issues in data sourcing and extraction
+
+Do you have any ethical concerns regarding the sourcing and extraction of your data?
+
+#### Ethical implications of business requirements
+
+Are there any ethical implications of the business requirements?
+
+# Analysis
+
+#### Stages in the data analysis process
+
+What were the main stages in your data analysis process?
+
+#### Tools for data analysis
+
+What were the main tools you used for your analysis?
+
+#### Descriptive, diagnostic, predictive and prescriptive analysis
+
+Please report under which of the below categories your analysis falls **and why** (can be more than one)
+
+::: emphasis
+**Descriptive Analytics** tells you what happened in the past.
+
+**Diagnostic Analytics** helps you understand why something happened in the past.
+
+**Predictive Analytics** predicts what is most likely to happen in the future.
+
+**Prescriptive Analytics** recommends actions you can take to affect those outcomes.
+:::
+
+# PDA Outcomes
+
+### Working with Data (J4Y6 35)
+
+#### 1. Plan an analysis to provide business intelligence
+
+-   1.1 Business intelligence and data-driven decision making
+-   1.2 Domain knowledge and the business context
+-   1.4 Internal and external data sources
+-   1.5 Data quality
+-   1.6 Stages in the data analysis process
+-   1.7 Descriptive, diagnostic, predictive and prescriptive analysis
+-   1.9 Ethical implications of business requirements
+-   1.10 Tools for data analysis
+
+#### 2. Extract data from a variety of sources
+
+-   2.1 Tools for querying data sources
+-   2.2 Types of data (categorical and numerical data and their sub-types)
+-   2.3 Data formats
+-   2.6 Data quality including data bias
+-   2.7 Ethical issues in data sourcing and extraction
+
+#### 4. Analyse data to provide business intelligence
+
+-   4.7 Role of domain knowledge in interpreting analyses
