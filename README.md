@@ -40,7 +40,7 @@ This project will use R with R Studios, along with Git/Git Hub for version contr
 
 * LCDataDictionary.csv - supplimentary information explaining variables in the data set 
 
-* lendining\_club_loans.csv - main data set containing all customer information, 42,538 observations
+* lending\_club_loans.csv - main data set containing all customer information, 42,538 observations
 
 * state\_names_info.csv - expands on state abbreviations that are found in the main data set
 
