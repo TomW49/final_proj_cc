@@ -10,23 +10,92 @@ library(janitor)
 
 ```{r}
 # loading data
-loan_data <- read_csv("data/lending_club_loans.csv")
-grades <- read_csv("data/grade_info.csv")
-states_info <- read_csv("data/state_names_info.csv")
-```
-
-```{r}
-# investigating data
-glimpse(loan_data)
-glimpse(grades)
-glimpse(states_info)
+loans <- read_csv("../data/lending_club_loans.csv")
+grades <- read_csv("../data/grade_info.csv")
+states_info <- read_csv("../data/state_names_info.csv")
 ```
 
 ```{r}
 # joining df's
-loan_data <- loan_data %>% 
+loans <- loans %>% 
   rename(state_abb = addr_state) %>% 
   left_join(states_info, by = "state_abb") %>% 
-  left_join(grades, by = "sub_grade")
+  left_join(grades, by = "sub_grade") %>% 
+  clean_names()
 ```
+
+```{r}
+# investigating data
+summary(loans)
+
+# checking na's
+loans %>% 
+ summarise(across(.fns = ~ sum(is.na(.x))))
+
+# removing vars with no predictive power and vars that are all na's
+loan_trim <- loans %>% 
+  select(-c("id", "member_id", "desc", "title", "url")) %>% 
+  select_if(~ !all(is.na(.))) %>% 
+  filter(!is.na(loan_amnt))
+
+loan_trim %>% 
+ summarise(across(.fns = ~ sum(is.na(.x))))
+
+  
+#loan_data_on_ramp <- loan_data %>% 
+#  select(-c("verification", "loan_status", ""))
+
+
+```
+
+```{r}
+# new col, loan status flag
+
+loan_trim <- loan_trim %>% 
+  mutate(loan_status_flag = if_else(
+    loan_status %in% c("Charged Off",
+                       "Does not meet the credit policy. Status:Charged Off",
+                       "Late (31-120 days)",
+                       "Late (16-30 days)",
+                       "Default"), 1, 0), 
+    .after = loan_status)
+
+```
+
+```{r}
+# looking at volume within loan status catagories
+loan_trim %>% 
+  ggplot() +
+  aes(y = loan_status) +
+  geom_bar()
+
+loan_data %>% 
+  group_by(loan_status) %>% 
+  count(loan_status, sort = T) 
+```
+
+
+
+
+```{r}
+library(caret)
+library(GGally)
+
+# correlaction matrix
+
+loan_data %>% 
+  select(c(inq_last_6mths, loan_amnt, loan_status_flag, fico_range_low, fico_range_high)) %>% 
+  ggcorr(label = T, layout.exp = 1)
+
+# scaling data 
+
+loan_data_scaled <- as.data.frame(scale(loan_data))
+
+mod1 <- glm(loan_status_flag ~ inq_last_6mths,
+            data = loan_data,
+            family = binomial((link = "logit")))
+
+summary(mod1)
+```
+
 
