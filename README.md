@@ -24,7 +24,7 @@ Further reports are found in the documentation folder.
 
 This project will use R with R Studios, along with Git/Git Hub for version control.
 
-## Licence
+## License
 
 ## Contents
 
