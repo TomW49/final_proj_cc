@@ -7,7 +7,7 @@ This is the final solo project at CodeClan which brings together all the skills 
 
 As titled, I chose my topic regarding loan defaults. Below is the task brief.
 
->"You’ve been hired by LendingClub, an online loan provider to help with some problems their business has been facing. <br><br>They are concerned about the default rate on their loans. They want to understand who is likely to default and who they should lend to in the future."
+>"You’ve been hired by LendingClub, an online loan provider to help with some problems their business has been facing.<br>They are concerned about the default rate on their loans. They want to understand who is likely to default and who they should lend to in the future."
 
 I have been provided with data sets as metioned further below. 
 
