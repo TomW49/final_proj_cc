@@ -6,6 +6,8 @@ output: html_notebook
 ```{r}
 library(tidyverse)
 library(janitor)
+library(lubridate)
+library(GGally)
 ```
 
 ```{r}
@@ -21,7 +23,9 @@ loans <- loans %>%
   rename(state_abb = addr_state) %>% 
   left_join(states_info, by = "state_abb") %>% 
   left_join(grades, by = "sub_grade") %>% 
-  clean_names()
+  clean_names() 
+
+rm(states_info, grades)
 ```
 
 ```{r}
@@ -33,8 +37,9 @@ loans %>%
  summarise(across(.fns = ~ sum(is.na(.x))))
 
 # removing vars with no predictive power and vars that are all na's
-# all bar 1 record had a payment plan, so removing var
-loan_trim <- loans %>% 
+# all bar 1 record had a payment plan in  pymnt_plan, so removing var
+loans_trim <- loans %>% 
+  filter(!is.na(id) | !is.na(state_abb))%>% 
   select(-c("id", "member_id", "desc", "title", "url", "application_type",
             "delinq_amnt", "tax_liens", "acc_now_delinq", "chargeoff_within_12_mths",
             "policy_code", "collections_12_mths_ex_med", "last_fico_range_low",
@@ -42,62 +47,136 @@ loan_trim <- loans %>%
             "last_pymnt_d", "last_pymnt_amnt", "initial_list_status", 
             "mths_since_last_record", "fico_range_high", "state_abb", "zip_code",
             "pymnt_plan")) %>% 
-  select_if(~ !all(is.na(.)))
-
-# new col, loan status flag
-loan_trim <- loan_trim %>% 
-  mutate(loan_status_flag = if_else(
+  select_if(~ !all(is.na(.))) %>% 
+  mutate(defaulted = if_else(  # new col, loan status flag
     loan_status %in% c("Charged Off",
                        "Does not meet the credit policy. Status:Charged Off",
                        "Late (31-120 days)",
                        "Late (16-30 days)",
-                       "Default"), 1, 0), 
-    .after = loan_status)
+                       "Default"), TRUE, FALSE), 
+    .after = loan_status) %>% 
+  mutate(issue_d = my(issue_d),       # changing date var from chr to date
+         earliest_cr_line = my(earliest_cr_line))
+
+# checking na's
+loans_trim %>% 
+ summarise(across(.fns = ~ sum(is.na(.x))))
 ```
 
 ```{r}
-loan_trim %>% 
-  select(-c(mths_since_last_delinq, pub_rec_bankruptcies)) %>% 
-    drop_na() %>% 
-    summarise(across(.fns = ~ sum(is.na(.x))))
-  
-  filter(!is.na(c("loan_amnt", "annual_inc", 
-                  "earliest_cr_line", "delin1_2yrs", 
-                  "total_acc", "inq_last_6mths"))) 
+# selecting categorical vars +onboarding vars
 
-loan_trim %>% 
- summarise(across(.fns = ~ sum(is.na(.x))))
+# recoveries shows that a charge off has been made, ie deceleration debt is unlikely to be collected, normally at 6 months of no pay
+loans_trim %>% 
+  select(loan_amnt, term, int_rate, sub_grade, emp_length, home_ownership, annual_inc, loan_status_flag, purpose, delinq_2yrs, fico_range_low, mths_since_last_delinq)
+```
 
-loan_trim %>% 
-  count(pymnt_plan)
+### Location of cusotmers who have charged off on laons and initiated recoveries from LC
+```{r}
+# about 12% of customers are charged off
+
+# relational to state size
+
+# note, cal has 1	California	39,538,223
+# 2	Texas	- 29,145,505
+# 3	Florida	- 21,538,187
+# 4	New York	- 20,201,249
+loans_trim %>% 
+  filter(recoveries > 0) %>% 
+  group_by(state_name) %>% 
+  summarise(count = n()) %>% 
+  ggplot() +
+  aes(x = count, y = reorder(state_name, count)) +
+  geom_col()
+```
+
+
+```{r}
+#loans_trim %>% 
+#  select(-c(mths_since_last_delinq, pub_rec_bankruptcies)) %>% 
+#    drop_na() %>% 
+#    summarise(across(.fns = ~ sum(is.na(.x))))
+#  
+#  filter(!is.na(c("loan_amnt", "annual_inc", 
+#                  "earliest_cr_line", "delin1_2yrs", 
+#                  "total_acc", "inq_last_6mths"))) 
+#
+#loans_trim %>% 
+# summarise(across(.fns = ~ sum(is.na(.x))))
+
 #loan_data_on_ramp <- loan_data %>% 
 #  select(-c("verification", "loan_status", ""))
 ```
 
 ```{r}
-loans %>% 
-  distinct(emp_length)
+#loans %>% 
+#  distinct(emp_length)
 
 # turning emo_length into numerical
-loans %>% 
-  select(emp_length) %>% 
-  mutate(emp_length = recode(emp_length, "10+ years" = "10", "< 1 year" = "0.92")) %>% 
-  mutate(emp_length = as.numeric(str_remove_all(emp_length, "[a-z]"))) 
+#loans %>% 
+#  select(emp_length) %>% 
+#  mutate(emp_length = recode(emp_length, "10+ years" = "10", "< 1 year" = "0.92")) %>% 
+#  mutate(emp_length = as.numeric(str_remove_all(emp_length, "[a-z]"))) 
 ```
 
 # Graphs
 ```{r}
 # looking at volume within loan status categories
-loan_trim %>% 
+loans_trim %>% 
   ggplot() +
   aes(y = loan_status) +
   geom_bar()
+```
 
-loan_trim
 
+```{r}
+#-------------------------------
+
+# counting issue dates
+loans_trim %>% 
+  count(issue_d)
+
+# counting purpose of loan types
+loans_trim %>% 
+  count(purpose, sort = T)
+
+loans_trim
+
+# types of p2p loans over time
+loans_trim %>% 
+  group_by(purpose, issue_d) %>% 
+  summarise(count = n()) %>% 
+  ggplot() +
+  aes(x = issue_d, y = count, colour = purpose) +
+  geom_line() 
+  
+#---------------------------
+```
+
+
+```{r}
+# showing types of loan status
 loans %>% 
   group_by(loan_status) %>% 
   count(loan_status, sort = T) 
+
+# volume of negatively attributed loans
+loans_trim %>% 
+  count(loan_status_flag, sort = T)
+
+# plot showing volume of negative vs positive loan status
+loans_trim %>% 
+  mutate(loan_status_flag = a       
+  as.factor(loan_status_flag)) %>% 
+  ggplot() +
+  aes(y = purpose, fill = loan_status_flag) +
+  geom_bar()
+
+# shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
+loans %>% 
+  filter(purpose == "other") %>% 
+  summarise(desc) %>% 
+  view()
 ```
 
 ```{r}
@@ -105,12 +184,12 @@ library(caret)
 library(GGally)
 
 # correlation matrix
-loan_trim %>% 
+loans_trim %>% 
   select(c(inq_last_6mths, loan_amnt, loan_status_flag, fico_range_low, fico_range_high)) %>% 
   ggcorr(label = T, layout.exp = 1)
 
 # scaling data 
-loan_data_scaled <- as.data.frame(scale(loan_trim))
+loans_data_scaled <- as.data.frame(scale(loan_trim))
 
 mod1 <- glm(loan_status_flag ~ inq_last_6mths,
             data = loan_trim,
