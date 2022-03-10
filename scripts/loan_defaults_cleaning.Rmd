@@ -42,34 +42,8 @@ loan_trim <- loans %>%
             "last_pymnt_d", "last_pymnt_amnt", "initial_list_status", 
             "mths_since_last_record", "fico_range_high", "state_abb", "zip_code",
             "pymnt_plan")) %>% 
-  select_if(~ !all(is.na(.))) %>% 
-  filter(!is.na(c("loan_amnt", "annual_inc", 
-                  "earliest_cr_line", "delin1_2yrs", 
-                  "total_acc", "inq_last_6mths"))) %>% 
-  mutate()
+  select_if(~ !all(is.na(.)))
 
-loans %>% 
-  distinct(emp_length)
-
-loans %>% 
-  select(emp_length) %>% 
-  mutate(emp_length = str_remove_all(emp_length, "[a-z]")) # [^[:alnum:]]+
-
-!is.na(annual_inc),
-         !is.na(earliest_cr_line), !is.na(delin1_2yrs), 
-         !is.na(total_acc), !is.na)
-
-rm(loan_trim)
-loan_trim %>% 
- summarise(across(.fns = ~ sum(is.na(.x))))
-
-loan_trim %>% 
-  count(pymnt_plan)
-#loan_data_on_ramp <- loan_data %>% 
-#  select(-c("verification", "loan_status", ""))
-```
-
-```{r}
 # new col, loan status flag
 loan_trim <- loan_trim %>% 
   mutate(loan_status_flag = if_else(
@@ -82,11 +56,44 @@ loan_trim <- loan_trim %>%
 ```
 
 ```{r}
+loan_trim %>% 
+  select(-c(mths_since_last_delinq, pub_rec_bankruptcies)) %>% 
+    drop_na() %>% 
+    summarise(across(.fns = ~ sum(is.na(.x))))
+  
+  filter(!is.na(c("loan_amnt", "annual_inc", 
+                  "earliest_cr_line", "delin1_2yrs", 
+                  "total_acc", "inq_last_6mths"))) 
+
+loan_trim %>% 
+ summarise(across(.fns = ~ sum(is.na(.x))))
+
+loan_trim %>% 
+  count(pymnt_plan)
+#loan_data_on_ramp <- loan_data %>% 
+#  select(-c("verification", "loan_status", ""))
+```
+
+```{r}
+loans %>% 
+  distinct(emp_length)
+
+# turning emo_length into numerical
+loans %>% 
+  select(emp_length) %>% 
+  mutate(emp_length = recode(emp_length, "10+ years" = "10", "< 1 year" = "0.92")) %>% 
+  mutate(emp_length = as.numeric(str_remove_all(emp_length, "[a-z]"))) 
+```
+
+# Graphs
+```{r}
 # looking at volume within loan status categories
 loan_trim %>% 
   ggplot() +
   aes(y = loan_status) +
   geom_bar()
+
+loan_trim
 
 loans %>% 
   group_by(loan_status) %>% 
