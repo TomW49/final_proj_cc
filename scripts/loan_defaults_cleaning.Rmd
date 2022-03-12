@@ -39,16 +39,17 @@ loans %>%
 # removing vars with no predictive power and vars that are all na's
 # all bar 1 record had a payment plan in  pymnt_plan, so removing var
 loans_trim <- loans %>% 
-  filter(!is.na(id) | !is.na(state_abb))%>% 
-  select(-c("id", "member_id", "desc", "title", "url", "application_type",
+  filter(!is.na(id) | !is.na(state_abb)) %>% 
+  select(-c("id", "member_id", "funded_amnt", "funded_amnt_inv", "desc", "title", 
+            "url", "application_type",
             "delinq_amnt", "tax_liens", "acc_now_delinq", "chargeoff_within_12_mths",
             "policy_code", "collections_12_mths_ex_med", "last_fico_range_low",
             "last_fico_range_high", "next_pymnt_d", "last_credit_pull_d",
             "last_pymnt_d", "last_pymnt_amnt", "initial_list_status", 
             "mths_since_last_record", "fico_range_high", "state_abb", "zip_code",
-            "pymnt_plan")) %>% 
+            "pymnt_plan", "desc", "title", "recoveries", "state_abb", )) %>% 
   select_if(~ !all(is.na(.))) %>% 
-  mutate(defaulted = if_else(  # new col, loan status flag
+  mutate(defaulted = if_else(  # new col, classing loan defaulted if late, charged off or defaulted
     loan_status %in% c("Charged Off",
                        "Does not meet the credit policy. Status:Charged Off",
                        "Late (31-120 days)",
@@ -64,11 +65,46 @@ loans_trim %>%
 ```
 
 ```{r}
-# selecting categorical vars +onboarding vars
+# selecting categorical vars + on boarding vars
+
+background_checks <- loans %>% 
+  select(c(verification_status, # category - verified income
+           dti, # dbl - LC ratio on monthly debts/monthly income
+           delinq_2yrs,# dbl - The number of 30+  delinquency in the borrower's credit file for the past 2 years
+           earliest_cr_line, # dbl - The month the borrower's earliest reported credit line was opened
+           fico_range_low, # dbl - credit score at loan origin
+           inq_last_6mths, # dbl - The number of inquiries in past 6 months (excluding auto and mortgage inquiries)
+           mths_since_last_delinq, # dbl - The number of months since the borrower's last delinquency.(lc??)
+           mths_since_last_record, # The number of months since the last public record.
+           open_acc, # dbl - The number of open credit lines in the borrower's credit file.
+           pub_rec, # dbl - The number of open credit lines in the borrower's credit file.
+           revol_bal, # dbl - Total credit revolving balance  unpaid credit at the end of a billing cycle
+           revol_util, # chr - %, amount of credit the borrower is using relative to all available revolving credit
+           total_acc, # dbl - The total number of credit lines currently in the borrower's credit file
+           open_rv_12m, # boolean - number of revolving credit cards <12mths, full of NA
+           open_rv_24m, ## boolean - number of revolving credit cards <24mths, full of NA
+           max_bal_bc, # boolean - Maximum current balance owed on all revolving accounts, full of NA
+           all_util, # boolean - Balance to credit limit on all trades
+           total_rev_hi_lim, # boolean - Total revolving high credit/credit limit, full of NA
+           inq_fi, # boolean - Number of personal finance inquiries, full of NA
+           total_cu_tl, # boolean - Number of finance trades, full of NA
+           inq_last_12m, # boolean - Number of credit inquiries in past 12 months, full of NA
+           acc_open_past_24mths, # boolean -  Number of trades opened in past 24 months, full of NA
+           avg_cur_bal, # boolean - Average current balance of all accounts, full of NA
+           bc_open_to_buy, # boolean - Total open to buy on revolving bankcards, full of NA
+           bc_util, # boolean - Ratio of total current balance to high credit/credit limit for all bankcard accounts, full of NA
+           chargeoff_within_12_mths, # dbl - Number of charge-offs within 12 months, 0 for all obs
+           delinq_amnt, # dbl - The past-due amount owed for the accounts on which the borrower is now delinquent, 6053 + 27, 0
+           mo_sin_old_il_acct, # boolean - Months since oldest bank installment account opened, full of NA
+           mo_sin_old_rev_tl_op, # boolean - Months since oldest revolving account opened, full of NA
+           mo_sin_rcnt_rev_tl_op, # boolean - Months since most recent revolving account opened, full of NA
+           mo_sin_rcnt_tl, # boolean - Months since most recent account opened, full of NA
+           mort_acc, #
+           ))
 
 # recoveries shows that a charge off has been made, ie deceleration debt is unlikely to be collected, normally at 6 months of no pay
 loans_trim %>% 
-  select(loan_amnt, term, int_rate, sub_grade, emp_length, home_ownership, annual_inc, loan_status_flag, purpose, delinq_2yrs, fico_range_low, mths_since_last_delinq)
+  select(c(loan_amnt, term, int_rate, installment, sub_grade, emp_length, home_ownership, verification_status, annual_inc, issue_d, purpose, zip_code, delinq_2yrs, fico_range_low, mths_since_last_delinq))
 ```
 
 ### Location of cusotmers who have charged off on laons and initiated recoveries from LC
@@ -81,7 +117,7 @@ loans_trim %>%
 # 2	Texas	- 29,145,505
 # 3	Florida	- 21,538,187
 # 4	New York	- 20,201,249
-loans_trim %>% 
+loans %>% 
   filter(recoveries > 0) %>% 
   group_by(state_name) %>% 
   summarise(count = n()) %>% 
@@ -162,14 +198,12 @@ loans %>%
 
 # volume of negatively attributed loans
 loans_trim %>% 
-  count(loan_status_flag, sort = T)
+  count(defaulted, sort = T)
 
 # plot showing volume of negative vs positive loan status
 loans_trim %>% 
-  mutate(loan_status_flag = a       
-  as.factor(loan_status_flag)) %>% 
-  ggplot() +
-  aes(y = purpose, fill = loan_status_flag) +
+  as.factor(defaulted) %>%  
+  aes(y = purpose, fill = defaulted ) +
   geom_bar()
 
 # shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
@@ -178,6 +212,17 @@ loans %>%
   summarise(desc) %>% 
   view()
 ```
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
 library(caret)
