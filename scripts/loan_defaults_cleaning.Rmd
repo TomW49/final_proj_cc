@@ -231,10 +231,36 @@ loans_cleaned %>%
 ```
 
 # Graphs
+### Graph Theme
+```{r}
+lc_theme <- function(){
+  theme(panel.background = element_rect(fill = "grey15"),
+        legend.key = element_rect(fill = "grey15"),
+        panel.border = element_blank(),
+        panel.grid.major = element_line(color = "grey25"),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold")
+  )
+}
+# dodgerblue4
+# firebrick3
+# ghostwhite
+```
+
 ### Map showing rate of defaults across USA
 ```{r}
 # str to lower to match mapping library
 # creating map
+
+# total ratio of defaulted per state
+default_rate_per_state <- loans_cleaned %>%
+  group_by(state_name) %>%
+  mutate(state_name = as.character(state_name)) %>% 
+  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
+  arrange(desc(defaulted_rate))
+
 default_rate_per_state %>% 
   select(state_name, defaulted_rate) %>%
   rename(region = state_name, value = defaulted_rate) %>% 
@@ -255,28 +281,27 @@ loans_cleaned %>%
   group_by(state_name) %>% 
   summarise(count = n()) %>% 
   ggplot() +
-  aes(x = count, y = reorder(state_name, count)) +
-  geom_col()
+  aes(x = count, y = reorder(state_name, count, fill = "#0047b3", position = "dodge")) +
+  geom_col() +
+  lc_theme() +
+  ggtitle( "Total LendingClub Loans Per State",
+          subtitle = "Between 2007 - 2011") +
+  xlab("Loans") +
+  ylab("States")
 
 # total defaulted loans by state 
 loans_cleaned %>% 
-  filter(defaulted == T) %>% 
+  filter(defaulted == "Yes") %>% 
   group_by(state_name) %>% 
   summarise(count = n()) %>% 
   ggplot() +
   aes(x = count, y = reorder(state_name, count)) +
   geom_col()
 
-# total ratio of defaulted per state
-default_rate_per_state <- loans_cleaned %>%
-  group_by(state_name) %>%
-  summarise(count = n(), defaulted_rate = sum(defaulted == T) / n()) %>% 
-  arrange(desc(defaulted_rate))
-
 # shows Nebraska has highest default rate although small proportion
 loans_cleaned %>%
   group_by(state_name) %>%
-  summarise(count = n(), defaulted_rate = sum(defaulted == T) / n()) %>% 
+  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
   arrange(desc(defaulted_rate)) %>% 
   ggplot() +
   aes(x = defaulted_rate, y = reorder(state_name, defaulted_rate)) +
@@ -542,6 +567,7 @@ auc(roc_obj_mod4)
 ```
 
 ```{r}
+# will not run
 mod4_all_preds_cv <- train(defaulted ~ .,
                            data = onramp_data_trimmed,
                            trControl = train_control,
