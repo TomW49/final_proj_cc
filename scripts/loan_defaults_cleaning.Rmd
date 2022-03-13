@@ -2,7 +2,7 @@
 title: "R Notebook"
 output: html_notebook
 ---
-
+# Libraries
 ```{r}
 library(tidyverse)
 library(janitor)
@@ -10,6 +10,7 @@ library(lubridate)
 library(GGally)
 ```
 
+# Reading in data
 ```{r}
 # loading data
 loans <- read_csv("../data/lending_club_loans.csv")
@@ -17,6 +18,7 @@ grades <- read_csv("../data/grade_info.csv")
 states_info <- read_csv("../data/state_names_info.csv")
 ```
 
+# Joining df's
 ```{r}
 # joining df's
 loans <- loans %>% 
@@ -28,6 +30,7 @@ loans <- loans %>%
 rm(states_info, grades)
 ```
 
+# Cleaning
 ```{r}
 # investigating data
 summary(loans)
@@ -64,6 +67,7 @@ loans_trim %>%
  summarise(across(.fns = ~ sum(is.na(.x))))
 ```
 
+# Splitting data into background_check data
 ```{r}
 # selecting vars used during the background checks of customer
 
@@ -117,7 +121,20 @@ background_checks <- loans %>%
            num_tl_120dpd_2m, # boolean - Number of accounts currently 120 days past due (updated in past 2 months), full of NA
            num_tl_30dpd, # boolean - Number of accounts currently 30 days past due (updated in past 2 months), full of NA
            num_tl_90g_dpd_24m, # boolean - Number of accounts 90 or more days past due in last 24 months, full of NA
-           num_tl_op_past_12m # boolean - Number of accounts opened in past 12 months, full of NA
+           num_tl_op_past_12m, # boolean - Number of accounts opened in past 12 months, full of NA
+           open_acc_6m,
+           open_acc_6m,
+           open_il_12m,
+           open_il_24m,
+           open_il_6m,
+           mths_since_rcnt_il, 
+           total_bal_il, 
+           il_util,
+           pct_tl_nvr_dlq,
+           pub_rec_bankruptcies,
+           tax_liens,
+           tot_hi_cred_lim,
+           total_bal_ex_mort,
            )) 
 
 # removing variables that are only NA
@@ -125,13 +142,48 @@ background_checks_trimmed <- background_checks %>%
   select_if(~ !all(is.na(.)))
 ```
 
+# Splitting data into onramp_data 
+```{r}
+loans %>% 
+  distinct(tot_cur_bal)
+# selecting vars used during on ramp phase of delivering loans
+# not including funded/inv due to no use
+onramp_data  <- loans %>% 
+  select(c(loan_amnt,
+           term,
+           int_rate,
+           installment,
+           sub_grade, # LC assigned loan subgrade, can use grade
+           emp_title, # chr - not really usefull
+           emp_length, # chr - years, should turn to factor and use as bins/dummy
+           home_ownership, # chr - binned
+           annual_inc, # dbl
+           issue_d,
+           loan_status,
+           pymnt_plan, # chr - turn logical
+           desc, # chr - text, no use
+           purpose, # chr - binned - turn to factor
+           title, # chr - user text to describe loan
+           zip_code, # chr - usefull for binning, redacted
+           state_name, # chr - turn to factor, no need for abbreviated var
+           fico_range_low,
+           fico_range_high, 
+           application_type, # chr - should bin solo or co-borrower - all IND, some NA
+           annual_inc_joint,# remove as all na
+           dti_joint,# remove as all na
+           verification_status_joint,# remove as all na
+           tot_coll_amt,# remove as all na
+           tot_cur_bal,# remove as all na
+           open_acc_6m,# remove as  as all 
+           open_acc_6m,# remove as all na
+           open_il_12m,# remove as all na
+           open_il_24m,# remove as all na
+           open_il_6m,# remove as all na
+  ))
+```
+
 
 ```{r}
-# selecting vars used during on ramp phase of delivering loans
-
-onramp_data 
-
-  
 loans %>% 
   select(-c(verification_status, # category - verified income
            dti, # dbl - LC ratio on monthly debts/monthly income
@@ -186,11 +238,9 @@ loans %>%
   )) %>%  view()
 
 # recoveries shows that a charge off has been made, ie deceleration debt is unlikely to be collected, normally at 6 months of no pay
-loans_trim %>% 
-  select(c(loan_amnt, term, int_rate, installment, sub_grade, emp_length, home_ownership, verification_status, annual_inc, issue_d, purpose, zip_code, delinq_2yrs, fico_range_low, mths_since_last_delinq))
 ```
 
-### Location of cusotmers who have charged off on laons and initiated recoveries from LC
+# Location of cusotmers who have charged off on laons and initiated recoveries from LC
 ```{r}
 # about 12% of customers are charged off
 
@@ -208,7 +258,6 @@ loans %>%
   aes(x = count, y = reorder(state_name, count)) +
   geom_col()
 ```
-
 
 ```{r}
 #loans_trim %>% 
@@ -239,6 +288,8 @@ loans %>%
 ```
 
 # Graphs
+
+## looking at volume within loan status categories
 ```{r}
 # looking at volume within loan status categories
 loans_trim %>% 
@@ -247,7 +298,7 @@ loans_trim %>%
   geom_bar()
 ```
 
-
+## †ypes of p2p loans over time
 ```{r}
 #-------------------------------
 
@@ -272,7 +323,7 @@ loans_trim %>%
 #---------------------------
 ```
 
-
+## plot showing volume of negative vs positive loan status
 ```{r}
 # showing types of loan status
 loans %>% 
@@ -296,17 +347,7 @@ loans %>%
   view()
 ```
 
-
-
-
-
-
-
-
-
-
-
-
+# LogReg Model
 ```{r}
 library(caret)
 library(GGally)
