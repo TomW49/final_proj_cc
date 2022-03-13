@@ -8,6 +8,10 @@ library(tidyverse)
 library(janitor)
 library(lubridate)
 library(GGally)
+library(broom)
+library(pROC)
+library(modelr)
+library(caret)
 ```
 
 # Reading in data
@@ -46,7 +50,8 @@ loans %>%
 # change na's to -1 mths_since_last_delinq + mths_since_last_record as cust have never had both
 # change na's to -1 as customers appear to never have had a number of defaults
 # changing date var from chr to date
-# discovered North Dakota was the NA' values
+# discovered North Dakota was the NA' value, so changed 
+# changed chr cols to factor for model
 loans_cleaned <- loans %>%
   filter(if_all(c(id, tax_liens, revol_util), ~ !is.na(.))) %>%
   mutate(defaulted = if_else(  
@@ -54,7 +59,7 @@ loans_cleaned <- loans %>%
                        "Does not meet the credit policy. Status:Charged Off",
                        "Late (31-120 days)",
                        "Late (16-30 days)",
-                       "Default"), TRUE, FALSE), 
+                       "Default"), "Yes", "No"), 
     .after = loan_status) %>% 
   mutate(mths_since_last_delinq = coalesce(mths_since_last_delinq, -1),
          mths_since_last_record = coalesce(mths_since_last_record, -1),
@@ -64,8 +69,8 @@ loans_cleaned <- loans %>%
   mutate(state_name = coalesce(state_name, "North Dakota")) %>% 
   mutate(int_rate = as.numeric(str_remove_all(int_rate, "[%]")),
          term = as.numeric(str_remove_all(term, "[a-z]")),
-         zip_code = as.numeric(str_remove_all(zip_code, "[a-z]")),
-         state_name = as.factor(state_name))
+         zip_code = as.numeric(str_remove_all(zip_code, "[a-z]"))) %>% 
+  mutate_if(is_character, as_factor)
 
 
 # na's remain in emp_title, desc, title, next_pymnt_d, last_pymnt_d, collections_12_mths_ex_med, mths_since_last_major_derog, chargeoff_within_12_mths - more however they are full of NA's (will remove later)
@@ -75,7 +80,7 @@ loans_cleaned %>%
 
 ```{r}
 # remove chargeoff_within_12_mths as 42390 - 0, 149 - NA
-```
+```   
 
 ```{r}
 #loans %>% 
@@ -237,7 +242,7 @@ default_rate_per_state %>%
   choroplethr::state_choropleth(title = "Default Rate Per State")
 ```
 
-# Location of cusotmers who have charged off on loans and initiated recoveries from LC
+### Location of cusotmers who have charged off on loans and initiated recoveries from LC
 ```{r}
 # proportional to state size
 # note, cal has 1	California	39,538,223
@@ -359,7 +364,7 @@ mod1 <- glm(loan_status_flag ~ inq_last_6mths,
 summary(mod1)
 ```
 
-### Looking at relationships in data
+### Setting up correlations
 ```{r}
 # splitting df down to compare easily 
 split1 <- onramp_data_trimmed %>% 
@@ -372,19 +377,176 @@ split3<- onramp_data_trimmed %>%
   select(defaulted, issue_d, purpose, zip_code, state_name, fico_range_high)
 ```
 
+### ggpairs()
 ```{r}
-# defaulted + int_rate / loan_amnt / term
+# defaulted + term(cat) > int_rate > loan_amnt 
 split1 %>% 
   ggpairs()
 
-# defaulted + annual_inc / emp_length
+# defaulted + annual_inc(cont) > home_ownership > emp_length
+# b-grades are most likely to default
+# lower income customers are more likely to default
 split2 %>% 
   ggpairs()
 
+# defaulted + fico_range_high(cat) > purpose (cat)
 split3 %>% 
-  ggpairs()
-
-onramp_data_trimmed %>% 
-  count(home_ownership)
+  ggpairs(cardinality_threshold = NULL)
 ```
+
+### Creating models
+```{r}
+# categorical
+mod1_1pred_term <- glm(defaulted ~ term, 
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+
+# continuous
+mod2_1pred_annual_inc <- glm(defaulted ~ annual_inc, 
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+
+# categorical
+mod3_1pred_purpose <- glm(defaulted ~ purpose, 
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+
+# all p-values are below 0, so tests are significant 
+clean_names(tidy(mod1_1pred_term))
+clean_names(tidy(mod2_1pred_annual_inc))
+clean_names(tidy(mod3_1pred_purpose))
+
+clean_names(glance(mod1_1pred_term))
+clean_names(glance(mod2_1pred_annual_inc))
+clean_names(glance(mod3_1pred_purpose))
+```
+
+### ROC curves
+```{r}
+onramp_data_trimmed_with_mod1 <- onramp_data_trimmed %>%
+  add_predictions(mod1_1pred_term, type = "response")
+
+onramp_data_trimmed_with_mod2 <- onramp_data_trimmed %>%
+  add_predictions(mod2_1pred_annual_inc, type = "response")
+
+onramp_data_trimmed_with_mod3 <- onramp_data_trimmed %>%
+  add_predictions(mod3_1pred_purpose, type = "response")
+
+roc_obj_mod1 <- onramp_data_trimmed_with_mod1  %>%
+  roc(response = defaulted, predictor = pred)
+
+roc_obj_mod2 <- onramp_data_trimmed_with_mod2  %>%
+  roc(response = defaulted, predictor = pred)
+
+roc_obj_mod3 <- onramp_data_trimmed_with_mod3  %>%
+  roc(response = defaulted, predictor = pred)
+
+roc_curve <- ggroc(
+  data = list(
+    mod1 = roc_obj_mod1, 
+    mod2 = roc_obj_mod2,
+    mod3 = roc_obj_mod3
+  ), 
+  legacy.axes = TRUE) +
+  coord_fixed()
+
+roc_curve
+
+# mod1 using term of loan seems out the bunch to be the best classifier as its "curve" is closest to the top left corner. Not really over the diagonal line for a random classifier for threshold values though...
+```
+
+```{r}
+auc(roc_obj_mod1)
+auc(roc_obj_mod2)
+auc(roc_obj_mod3)
+```
+
+### Cross validation, using a test and a train set
+```{r}
+train_control <- trainControl(method = "repeatedcv", 
+                              number = 5,
+                              repeats = 100,
+                              savePredictions = TRUE, 
+                              classProbs = TRUE, 
+                              summaryFunction = twoClassSummary)
+```
+
+```{r}
+mod1_1pred_term_cv <- train(mod1_1pred_term$formula,
+                                       data = onramp_data_trimmed,
+                                       trControl = train_control,
+                                       method = "glm",
+                                       family = binomial(link = 'logit'))
+```
+
+```{r}
+mod2_1pred_annual_inc_cv <- train(mod2_1pred_annual_inc$formula,
+                              data = onramp_data_trimmed,
+                              trControl = train_control,
+                              method = "glm",
+                              family = binomial(link = 'logit'))
+```
+
+```{r}
+mod3_1pred_purpose_cv <- train(mod3_1pred_purpose$formula,
+                           data = onramp_data_trimmed,
+                           trControl = train_control,
+                           method = "glm",
+                           family = binomial(link = 'logit'))
+```
+
+```{r}
+# near enough same AUC as when used on full data set - with one classifier hard to overfit
+mod1_1pred_term_cv$results
+mod2_1pred_annual_inc_cv$results
+mod3_1pred_purpose_cv$results
+```
+
+### Interpretation of the fitted coefficient with odds ratio
+```{r}
+coeff <- clean_names(tidy(mod1_1pred_term)) %>%
+  filter(term == "term") %>%
+  select(estimate)
+coeff
+```
+
+```{r}
+# this shows the odd of defaulting on a loan are increased by multiplication by a factor of 1.03
+odds_ratio <- exp(coeff * 1)
+odds_ratio
+```
+
+# Log Reg with all potential predictors
+```{r}
+mod4_all_preds <- glm(defaulted ~ ., 
+                      data = onramp_data_trimmed, 
+                      family = binomial(link = 'logit'))
+
+clean_names(tidy(mod4_all_preds)) %>%
+  select(term, p_value) %>%
+  filter(p_value > 0.05)
+```
+
+```{r}
+onramp_data_trimmed_with_mod4 <- onramp_data_trimmed %>%
+  add_predictions(mod4_all_preds, type = "response")
+
+roc_obj_mod4 <- onramp_data_trimmed_with_mod4  %>%
+  roc(response = defaulted, predictor = pred)
+
+ggroc(roc_obj_mod4) +
+  coord_fixed()
+
+# AUC and ROC curve could be better..
+auc(roc_obj_mod4)
+```
+
+```{r}
+mod4_all_preds_cv <- train(defaulted ~ .,
+                           data = onramp_data_trimmed,
+                           trControl = train_control,
+                           method = "glm",
+                           family = binomial(link = 'logit'))
+```
+
 
