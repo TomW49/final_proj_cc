@@ -61,7 +61,12 @@ loans_cleaned <- loans %>%
          pub_rec_bankruptcies = coalesce(pub_rec_bankruptcies, -1)) %>% 
   mutate(issue_d = my(issue_d),       
          earliest_cr_line = my(earliest_cr_line)) %>% 
-  mutate(state_name = coalesce(state_name, "North Dakota"))
+  mutate(state_name = coalesce(state_name, "North Dakota")) %>% 
+  mutate(int_rate = as.numeric(str_remove_all(int_rate, "[%]")),
+         term = as.numeric(str_remove_all(term, "[a-z]")),
+         zip_code = as.numeric(str_remove_all(zip_code, "[a-z]")),
+         state_name = as.factor(state_name))
+
 
 # na's remain in emp_title, desc, title, next_pymnt_d, last_pymnt_d, collections_12_mths_ex_med, mths_since_last_major_derog, chargeoff_within_12_mths - more however they are full of NA's (will remove later)
 loans_cleaned %>% 
@@ -165,14 +170,14 @@ background_checks_trimmed <- background_checks %>%
 ```{r}
 # selecting vars used during on ramp phase of delivering loans
 # not including funded/inv due to no use
-# not including garde as have subgrade
+# using grade rather than sub for correlation affect
 onramp_data  <- loans_cleaned %>% 
   select(c(defaulted,
            loan_amnt,
            term,
            int_rate,
            installment,
-           sub_grade, # LC assigned loan subgrade, can use grade
+           grade, # LC assigned loan subgrade, can use grade
            emp_title, # chr - not really useful
            emp_length, # chr - years, should turn to factor and use as bins/dummy
            home_ownership, # chr - binned
@@ -206,8 +211,9 @@ onramp_data_trimmed <- onramp_data %>%
 
 # removing user entered text data & loan_status as created flag, & pymnt_plan as all n bar 1
 # removing fico_range_low to have a higher tolerance for credit rate
+# removing application_type as they are all individual
 onramp_data_trimmed  <- onramp_data_trimmed %>% 
-   select(-c(emp_title, desc, title, loan_status, pymnt_plan, fico_range_low))
+   select(-c(emp_title, desc, title, loan_status, pymnt_plan, fico_range_low, application_type))
 ```
 
 # Stats
@@ -360,20 +366,25 @@ split1 <- onramp_data_trimmed %>%
   select(defaulted, loan_amnt, term, int_rate, installment)
 
 split2 <-  onramp_data_trimmed %>% 
-  select(defaulted, sub_grade, emp_length, home_ownership, annual_inc, application_type)
+  select(defaulted, grade, emp_length, home_ownership, annual_inc)
 
 split3<- onramp_data_trimmed %>% 
   select(defaulted, issue_d, purpose, zip_code, state_name, fico_range_high)
 ```
 
 ```{r}
+# defaulted + int_rate / loan_amnt / term
 split1 %>% 
   ggpairs()
 
+# defaulted + annual_inc / emp_length
 split2 %>% 
   ggpairs()
 
 split3 %>% 
   ggpairs()
+
+onramp_data_trimmed %>% 
+  count(home_ownership)
 ```
 
