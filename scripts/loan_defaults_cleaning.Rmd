@@ -72,6 +72,17 @@ loans_cleaned %>%
 # remove chargeoff_within_12_mths as 42390 - 0, 149 - NA
 ```
 
+```{r}
+#loans %>% 
+#  distinct(emp_length)
+
+# turning emo_length into numerical
+#loans %>% 
+#  select(emp_length) %>% 
+#  mutate(emp_length = recode(emp_length, "10+ years" = "10", "< 1 year" = "0.92")) %>% 
+#  mutate(emp_length = as.numeric(str_remove_all(emp_length, "[a-z]"))) 
+```
+
 # Splitting data into background_check data
 ```{r}
 # selecting vars used during the background checks of customer
@@ -154,6 +165,7 @@ background_checks_trimmed <- background_checks %>%
 ```{r}
 # selecting vars used during on ramp phase of delivering loans
 # not including funded/inv due to no use
+# not including garde as have subgrade
 onramp_data  <- loans_cleaned %>% 
   select(c(defaulted,
            loan_amnt,
@@ -191,6 +203,11 @@ onramp_data  <- loans_cleaned %>%
 # removing variables that are only NA
 onramp_data_trimmed <- onramp_data %>%
   select_if(~ !all(is.na(.)))
+
+# removing user entered text data & loan_status as created flag, & pymnt_plan as all n bar 1
+# removing fico_range_low to have a higher tolerance for credit rate
+onramp_data_trimmed  <- onramp_data_trimmed %>% 
+   select(-c(emp_title, desc, title, loan_status, pymnt_plan, fico_range_low))
 ```
 
 # Stats
@@ -202,7 +219,19 @@ loans_cleaned %>%
   summarise(Count = n(), percentage = Count/nrow(loans_cleaned))
 ```
 
-# Location of cusotmers who have charged off on laons and initiated recoveries from LC
+# Graphs
+### Map showing rate of defaults across USA
+```{r}
+# str to lower to match mapping library
+# creating map
+default_rate_per_state %>% 
+  select(state_name, defaulted_rate) %>%
+  rename(region = state_name, value = defaulted_rate) %>% 
+  mutate(region = str_to_lower(region)) %>% 
+  choroplethr::state_choropleth(title = "Default Rate Per State")
+```
+
+# Location of cusotmers who have charged off on loans and initiated recoveries from LC
 ```{r}
 # proportional to state size
 # note, cal has 1	California	39,538,223
@@ -244,35 +273,10 @@ loans_cleaned %>%
   scale_x_continuous(limits =c (0, 1))
 ```
 
-### map prep
-```{r}
-# str to lower to match mapping library
-# creating map
-default_rate_per_state %>% 
-  select(state_name, defaulted_rate) %>%
-  rename(region = state_name, value = defaulted_rate) %>% 
-  mutate(region = str_to_lower(region)) %>% 
-  choroplethr::state_choropleth(title = "Default Rate Per State")
-```
-
-
-```{r}
-#loans %>% 
-#  distinct(emp_length)
-
-# turning emo_length into numerical
-#loans %>% 
-#  select(emp_length) %>% 
-#  mutate(emp_length = recode(emp_length, "10+ years" = "10", "< 1 year" = "0.92")) %>% 
-#  mutate(emp_length = as.numeric(str_remove_all(emp_length, "[a-z]"))) 
-```
-
-# Graphs
-
 ### looking at volume within loan status categories
 ```{r}
 # looking at volume within loan status categories
-loans_trim %>% 
+loans_cleaned %>% 
   ggplot() +
   aes(y = loan_status) +
   geom_bar()
@@ -281,19 +285,21 @@ loans_trim %>%
 ### †ypes of p2p loans over time
 ```{r}
 #-------------------------------
+# data from mid 2007 - end 2011
 
-# counting issue dates
-loans_trim %>% 
-  count(issue_d)
+# total volume of LC loans over time
+loans_cleaned %>% 
+  count(issue_d, sort = T) %>% 
+  ggplot() +
+  aes(x = issue_d, y = n) +
+  geom_line()
 
 # counting purpose of loan types
-loans_trim %>% 
+loans_cleaned %>% 
   count(purpose, sort = T)
 
-loans_trim
-
 # types of p2p loans over time
-loans_trim %>% 
+loans_cleaned %>% 
   group_by(purpose, issue_d) %>% 
   summarise(count = n()) %>% 
   ggplot() +
@@ -306,22 +312,22 @@ loans_trim %>%
 ### plot showing volume of negative vs positive loan status
 ```{r}
 # showing types of loan status
-loans %>% 
+loans_cleaned %>% 
   group_by(loan_status) %>% 
   count(loan_status, sort = T) 
 
 # volume of negatively attributed loans
-loans_trim %>% 
+loans_cleaned %>% 
   count(defaulted, sort = T)
 
 # plot showing volume of negative vs positive loan status
-loans_trim %>% 
+loans_cleaned %>% 
   as.factor(defaulted) %>%  
   aes(y = purpose, fill = defaulted ) +
   geom_bar()
 
 # shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
-loans %>% 
+loans_cleaned %>% 
   filter(purpose == "other") %>% 
   summarise(desc) %>% 
   view()
@@ -347,4 +353,27 @@ mod1 <- glm(loan_status_flag ~ inq_last_6mths,
 summary(mod1)
 ```
 
+### Looking at relationships in data
+```{r}
+# splitting df down to compare easily 
+split1 <- onramp_data_trimmed %>% 
+  select(defaulted, loan_amnt, term, int_rate, installment)
+
+split2 <-  onramp_data_trimmed %>% 
+  select(defaulted, sub_grade, emp_length, home_ownership, annual_inc, application_type)
+
+split3<- onramp_data_trimmed %>% 
+  select(defaulted, issue_d, purpose, zip_code, state_name, fico_range_high)
+```
+
+```{r}
+split1 %>% 
+  ggpairs()
+
+split2 %>% 
+  ggpairs()
+
+split3 %>% 
+  ggpairs()
+```
 
