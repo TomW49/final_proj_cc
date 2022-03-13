@@ -39,62 +39,46 @@ summary(loans)
 loans %>% 
  summarise(across(.fns = ~ sum(is.na(.x))))
 
-  # filter(!is.na(id) | !is.na(state_abb)) %>% 
-  select(-c("id", "member_id", "funded_amnt", "funded_amnt_inv", "desc", "title", 
-            "url", "application_type",
-            "delinq_amnt", "tax_liens", "acc_now_delinq", "chargeoff_within_12_mths",
-            "policy_code", "collections_12_mths_ex_med", "last_fico_range_low",
-            "last_fico_range_high", "next_pymnt_d", "last_credit_pull_d",
-            "last_pymnt_d", "last_pymnt_amnt", "initial_list_status", 
-            "mths_since_last_record", "fico_range_high", "state_abb", "zip_code",
-            "pymnt_plan", "desc", "title", "recoveries", "state_abb", )) %>% 
-  select_if(~ !all(is.na(.))) %>% 
-  mutate(defaulted = if_else(  # new col, classing loan defaulted if late, charged off or defaulted
+# removing / coalesce na's / tidy up
+# remove na's from tax_liens - 148 na's - this also removes 29 consistent NA's
+# remove na's from revol_util - 93 na's
+# new col, classing loan defaulted if late, charged off or defaulted
+# change na's to -1 mths_since_last_delinq + mths_since_last_record as cust have never had both
+# change na's to -1 as customers appear to never have had a number of defaults
+# changing date var from chr to date
+# discovered North Dakota was the NA' values
+loans_cleaned <- loans %>%
+  filter(if_all(c(id, tax_liens, revol_util), ~ !is.na(.))) %>%
+  mutate(defaulted = if_else(  
     loan_status %in% c("Charged Off",
                        "Does not meet the credit policy. Status:Charged Off",
                        "Late (31-120 days)",
                        "Late (16-30 days)",
                        "Default"), TRUE, FALSE), 
     .after = loan_status) %>% 
-  mutate(issue_d = my(issue_d),       # changing date var from chr to date
-         earliest_cr_line = my(earliest_cr_line))
-
-# checking na's
-loans_trim %>% 
- summarise(across(.fns = ~ sum(is.na(.x))))
-```
-
-```{r}
-# removing vars with no predictive power and vars that are all na's
-# all bar 1 record had a payment plan in  pymnt_plan, so removing var
-loans %>%
-  filter(!is.na(id)) %>% # removing 3 na's from df
-  filter(!is.na(tax_liens)) %>% 
-  mutate(defaulted = if_else(  # new col, classing loan defaulted if late, charged off or defaulted
-    loan_status %in% c("Charged Off",
-                       "Does not meet the credit policy. Status:Charged Off",
-                       "Late (31-120 days)",
-                       "Late (16-30 days)",
-                       "Default"), TRUE, FALSE), 
-    .after = loan_status) %>% 
-  mutate(issue_d = my(issue_d),       # changing date var from chr to date
+  mutate(mths_since_last_delinq = coalesce(mths_since_last_delinq, -1),
+         mths_since_last_record = coalesce(mths_since_last_record, -1),
+         pub_rec_bankruptcies = coalesce(pub_rec_bankruptcies, -1)) %>% 
+  mutate(issue_d = my(issue_d),       
          earliest_cr_line = my(earliest_cr_line)) %>% 
+  mutate(state_name = coalesce(state_name, "North Dakota"))
+
+# na's remain in emp_title, desc, title, next_pymnt_d, last_pymnt_d, collections_12_mths_ex_med, mths_since_last_major_derog, chargeoff_within_12_mths - more however they are full of NA's (will remove later)
+loans_cleaned %>% 
  summarise(across(.fns = ~ sum(is.na(.x))))
-
 ```
+
 ```{r}
-loans %>% 
-  distinct(chargeoff_within_12_mths) %>% 
-  count(chargeoff_within_12_mths, sort = T)
+# remove chargeoff_within_12_mths as 42390 - 0, 149 - NA
 ```
-
 
 # Splitting data into background_check data
 ```{r}
 # selecting vars used during the background checks of customer
 
-background_checks <- loans %>% 
-  select(c(verification_status, # category - verified income
+background_checks <- loans_cleaned %>% 
+  select(c(defaulted,
+           verification_status, # category - verified income
            dti, # dbl - LC ratio on monthly debts/monthly income
            delinq_2yrs,# dbl - The number of 30+  delinquency in the borrower's credit file for the past 2 years
            earliest_cr_line, # dbl - The month the borrower's earliest reported credit line was opened
@@ -170,13 +154,14 @@ background_checks_trimmed <- background_checks %>%
 ```{r}
 # selecting vars used during on ramp phase of delivering loans
 # not including funded/inv due to no use
-onramp_data  <- loans %>% 
-  select(c(loan_amnt,
+onramp_data  <- loans_cleaned %>% 
+  select(c(defaulted,
+           loan_amnt,
            term,
            int_rate,
            installment,
            sub_grade, # LC assigned loan subgrade, can use grade
-           emp_title, # chr - not really usefull
+           emp_title, # chr - not really useful
            emp_length, # chr - years, should turn to factor and use as bins/dummy
            home_ownership, # chr - binned
            annual_inc, # dbl
@@ -208,41 +193,68 @@ onramp_data_trimmed <- onramp_data %>%
   select_if(~ !all(is.na(.)))
 ```
 
+# Stats
+### % of LC customers classified as defaulting
+```{r}
+# about 15% of customers are either charged off, late > 16days or have defaulted
+loans_cleaned %>% 
+  group_by(defaulted) %>% 
+  summarise(Count = n(), percentage = Count/nrow(loans_cleaned))
+```
+
 # Location of cusotmers who have charged off on laons and initiated recoveries from LC
 ```{r}
-# about 12% of customers are charged off
-
-# relational to state size
-
+# proportional to state size
 # note, cal has 1	California	39,538,223
 # 2	Texas	- 29,145,505
 # 3	Florida	- 21,538,187
 # 4	New York	- 20,201,249
-loans %>% 
-  filter(recoveries > 0) %>% 
+
+# total LC loans by state
+loans_cleaned %>% 
   group_by(state_name) %>% 
   summarise(count = n()) %>% 
   ggplot() +
   aes(x = count, y = reorder(state_name, count)) +
   geom_col()
+
+# total defaulted loans by state 
+loans_cleaned %>% 
+  filter(defaulted == T) %>% 
+  group_by(state_name) %>% 
+  summarise(count = n()) %>% 
+  ggplot() +
+  aes(x = count, y = reorder(state_name, count)) +
+  geom_col()
+
+# total ratio of defaulted per state
+default_rate_per_state <- loans_cleaned %>%
+  group_by(state_name) %>%
+  summarise(count = n(), defaulted_rate = sum(defaulted == T) / n()) %>% 
+  arrange(desc(defaulted_rate))
+
+# shows Nebraska has highest default rate although small proportion
+loans_cleaned %>%
+  group_by(state_name) %>%
+  summarise(count = n(), defaulted_rate = sum(defaulted == T) / n()) %>% 
+  arrange(desc(defaulted_rate)) %>% 
+  ggplot() +
+  aes(x = defaulted_rate, y = reorder(state_name, defaulted_rate)) +
+  geom_col() +
+  scale_x_continuous(limits =c (0, 1))
 ```
 
+### map prep
 ```{r}
-#loans_trim %>% 
-#  select(-c(mths_since_last_delinq, pub_rec_bankruptcies)) %>% 
-#    drop_na() %>% 
-#    summarise(across(.fns = ~ sum(is.na(.x))))
-#  
-#  filter(!is.na(c("loan_amnt", "annual_inc", 
-#                  "earliest_cr_line", "delin1_2yrs", 
-#                  "total_acc", "inq_last_6mths"))) 
-#
-#loans_trim %>% 
-# summarise(across(.fns = ~ sum(is.na(.x))))
-
-#loan_data_on_ramp <- loan_data %>% 
-#  select(-c("verification", "loan_status", ""))
+# str to lower to match mapping library
+# creating map
+default_rate_per_state %>% 
+  select(state_name, defaulted_rate) %>%
+  rename(region = state_name, value = defaulted_rate) %>% 
+  mutate(region = str_to_lower(region)) %>% 
+  choroplethr::state_choropleth(title = "Default Rate Per State")
 ```
+
 
 ```{r}
 #loans %>% 
