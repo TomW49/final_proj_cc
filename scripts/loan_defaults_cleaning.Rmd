@@ -110,11 +110,12 @@ default_rate_per_state <- loans_cleaned %>%
   summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
   arrange(desc(defaulted_rate))
 
+# Top 5 states with highest default rate
 default_rate_per_state %>% 
   summarise(state_name, count, defaulted_rate = round(defaulted_rate*100, 2)) %>% 
   slice(1:5) %>% 
   knitr::kable( 
-             caption = "Top 5 states with highest defualt rate",
+             caption = "Top 5 states with highest default rate",
              col.names = c("State", 
                            "Number of defaulted loans",
                            "Defaulted Rate, %"),
@@ -325,38 +326,84 @@ loans_cleaned %>%
 #---------------------------
 ```
 
-### plot showing volume of negative vs positive loan status
+### Barplot showing volume of negative vs positive loan status RESULTS - PURPOSE
 ```{r}
-# default_rate_per_purpose <-
-  
-  loans_cleaned %>%
-  group_by(purpose) %>%
-  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
-  arrange(desc(defaulted_rate))
-
-default_rate_per_state %>% 
-  summarise(state_name, count, defaulted_rate = round(defaulted_rate*100, 2)) %>% 
-  slice(1:5)
-
 # plot showing volume of negative vs positive loan status ratio no/yes
 loans_cleaned %>%
   group_by(purpose, defaulted) %>% 
+  count(purpose) %>% 
   ggplot() +
-  aes(y = purpose, fill = defaulted) +
-  geom_bar()
+  aes(y = reorder(purpose, n), 
+      x = n, 
+      fill = defaulted) +
+  geom_col() +
+  labs( 
+    title = "Volume of defaulted to non-defaulted loans per purpose",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "Purpose",
+    fill = "Defaulted") +
+  scale_fill_discrete(limits = c("Yes", "No")) +
+  theme(axis.text.y = element_text(colour  = c('firebrick3',
+                                               'grey50',
+                                               'firebrick3',
+                                               'grey50',
+                                               'grey50',
+                                               'grey50',
+                                               'grey50',
+                                               'grey50',
+                                               'firebrick3',
+                                               'grey50',
+                                               'grey50',
+                                               'grey50',
+                                               'grey50',
+                                               'grey50'),
+                                   face = "bold")) 
 
+# plot showing ratio of negative vs positive loan status ratio no/yes
 loans_cleaned %>%
-  group_by(purpose) %>% 
+  group_by(purpose, defaulted) %>% 
+  count(purpose) %>% 
   ggplot() +
-  aes(y = (purpose/sum(purpose)), fill = defaulted) +
-  geom_bar()
+  geom_col(aes(y = reorder(purpose, n),
+               x = n,
+               fill = defaulted),
+           position = "fill") +
+  lc_theme() +
+  labs( 
+    title = "Ratio of defaulted to non-defualted loans per purpose",
+    subtitle = "Between 2007 - 2011",
+    x = "Ratio",
+    y = "Purpose",
+    fill = "Defaulted") +
+  scale_fill_discrete(limits = c("Yes", "No"))
+
+# table for purpose volumes of defaults 
+loans_cleaned %>% 
+  filter(defaulted == "Yes") %>% 
+  count(purpose, sort = T) %>% 
+  knitr::kable( 
+    caption = "Volume of defaults per purpose",
+    col.names = c("Purpose", 
+                  "Number of Defaults"),
+    "pipe")
 
 # shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
 loans_cleaned %>% 
   filter(purpose == "other") %>% 
-  summarise(desc) %>% 
-  view()
+  summarise(desc)
 ```
+
+### Linegraph - Fico_range_high
+```{r}
+loans_cleaned %>% 
+  group_by(fico_range_high, defaulted) %>% 
+  count(fico_range_high) %>% 
+  ggplot() +
+  aes(x = fico_range_high, y = n, colour = defaulted) +
+  geom_line()
+```
+
 
 # LogReg Model
 ```{r}
