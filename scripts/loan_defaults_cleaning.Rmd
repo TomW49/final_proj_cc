@@ -87,21 +87,39 @@ onramp_data  <- loans_cleaned %>%
 ```
 
 # Stats
-### % of LC customers classified as defaulting
+### Percentage of LC customers classified as defaulting RESULTS - DEFAULTS
 ```{r}
 # about 15% of customers are either charged off, late > 16days or have defaulted
 loans_cleaned %>% 
   group_by(defaulted) %>% 
-  summarise(Count = n(), percentage = Count/nrow(loans_cleaned))
+  summarise(Count = n(),
+            Percent = round((Count/nrow(loans_cleaned))* 100, 2)) %>% 
+  knitr::kable( 
+             caption = "Percentage of LendingClub customers classified as defaulting",
+             col.names = c("Defaulted", 
+                           "Count",
+                           "%"),
+             "pipe")
 ```
 
-### Mean/median number of loans per state + Ration of defaulter per state
+### Mean/median number of loans per state + Ration of defaulter per state RESULTS - GEOGRAPHY
 ```{r}
 # total ratio of defaulted per state
 default_rate_per_state <- loans_cleaned %>%
   group_by(state_name) %>%
   summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
   arrange(desc(defaulted_rate))
+
+default_rate_per_state %>% 
+  summarise(state_name, count, defaulted_rate = round(defaulted_rate*100, 2)) %>% 
+  slice(1:5) %>% 
+  knitr::kable( 
+             caption = "Top 5 states with highest defualt rate",
+             col.names = c("State", 
+                           "Number of defaulted loans",
+                           "Defaulted Rate, %"),
+             "pipe")
+  
 # 847.4
 default_rate_per_state %>%
   summarise(mean(count))
@@ -131,7 +149,7 @@ lc_theme <- function(){
 # ghostwhite
 ```
 
-### Map showing rate of defaults across USA
+### Map showing rate of defaults across USA RESULTS - GEOGRAPHY
 ```{r}
 # str to lower to match mapping library
 # creating map
@@ -142,7 +160,7 @@ default_rate_per_state %>%
   choroplethr::state_choropleth(title = "Default Rate Per State")
 ```
 
-### Barchart - Total LendingClub Loans Per State
+### Barchart - Total LendingClub Loans Per State RESULTS - GEOGRAPHY
 ```{r}
 # proportional to state size
 # note, cal has 1	California	39,538,223
@@ -169,7 +187,7 @@ loans_cleaned %>%
   gghighlight(n >= min(top5_states$n))
 ```
 
-### Barchart - Total Defaulted LendingClub Loans Per State
+### Barchart - Total Defaulted LendingClub Loans Per State RESULTS - GEOGRAPHY
 ```{r}
 # total defaulted loans by state 
 top5_defaulted_states <- loans_cleaned %>% 
@@ -192,7 +210,7 @@ loans_cleaned %>%
   gghighlight(n >= min(top5_defaulted_states$n))
 ```
 
-### Barchart - Ratio of Defaulted LendingClub Loans Per State(highlighting top 5 states above avg loan count)
+### Barchart - Ratio of Defaulted LendingClub Loans Per State(highlighting top 5 states above avg loan count) RESULTS - GEOGRAPHY
 ```{r}
 # taking top 5 states with highest default rate with a count more than the average amnt of loans per state
 # mean number of loans per state 847.4	
@@ -200,6 +218,27 @@ top5_defaulted_states_mean_loans <- default_rate_per_state %>%
   filter(count > mean(count)) %>% 
   arrange(desc(defaulted_rate)) %>%
   slice(1:5) 
+
+# Top 5 states above average loan count with highest default rate
+default_rate_per_state %>% 
+  filter(count > mean(count)) %>% 
+  arrange(desc(defaulted_rate)) %>%
+  summarise(State = state_name, 
+            "Number of defaulted loans" = count,
+            "Defaulted Rate, %" = round(defaulted_rate*100, 2)) %>% 
+  slice(1:5) %>% 
+   knitr::kable(caption = "Top 5 states above average loan count with highest default rate")
+
+#
+default_rate_per_state %>% 
+  filter(defaulted_rate < mean(defaulted_rate) & count > mean(count)) %>% 
+  arrange(desc(defaulted_rate)) %>%
+  summarise(State = state_name, 
+            "Number of defaulted loans" = count,
+            "Defaulted Rate, %" = round(defaulted_rate*100, 2)) %>% 
+ # slice(26:31) %>% 
+   knitr::kable(caption = "States with lowest default rate that are above average loan count, 'Least likely to default on loans'")
+  
 
 # shows Nebraska has highest default rate although small proportion
 
@@ -217,7 +256,7 @@ default_rate_per_state %>%
   geom_col(data = top5_defaulted_states_mean_loans, fill = "firebrick3")
 ```
 
-### Barchart - Volume of LendingClub Loan Catagories
+### Barchart - Volume of LendingClub Loan Catagories DATA
 ```{r}
 # showing types of loan status
 loans_cleaned %>% 
@@ -246,10 +285,10 @@ loans_cleaned %>%
                                             'grey50',
                                             'firebrick3',
                                             'grey50'),
-                                   face = "bold"))
+                                   face = "bold")) 
 ```
 
-### Linegraph: †ypes of p2p loans over time
+### Types of LendingClub Loans, 2007 - 2011 DATA 
 ```{r}
 #-------------------------------
 # data from mid 2007 - end 2011
@@ -264,7 +303,10 @@ loans_cleaned %>%
 # counting purpose of loan types
 loans_cleaned %>% 
   count(purpose, sort = T) %>% 
+  summarise(Purpose = purpose, Count = n, 
+            Percent = round((Count/nrow(loans_cleaned))* 100, 2)) %>% 
   knitr::kable()
+
 
 # types of p2p loans over time
 loans_cleaned %>% 
@@ -272,17 +314,41 @@ loans_cleaned %>%
   summarise(count = n()) %>% 
   ggplot() +
   aes(x = issue_d, y = count, colour = purpose) +
-  geom_line() 
+  geom_line() +
+  lc_theme() +
+  labs( 
+    title = "Types of LendingClub Loans",
+    subtitle = "Between 2007 - 2011",
+    x = "",
+    y = "Volume",
+    colour = "Purpose")
 #---------------------------
 ```
 
 ### plot showing volume of negative vs positive loan status
 ```{r}
+# default_rate_per_purpose <-
+  
+  loans_cleaned %>%
+  group_by(purpose) %>%
+  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
+  arrange(desc(defaulted_rate))
+
+default_rate_per_state %>% 
+  summarise(state_name, count, defaulted_rate = round(defaulted_rate*100, 2)) %>% 
+  slice(1:5)
+
 # plot showing volume of negative vs positive loan status ratio no/yes
 loans_cleaned %>%
   group_by(purpose, defaulted) %>% 
   ggplot() +
   aes(y = purpose, fill = defaulted) +
+  geom_bar()
+
+loans_cleaned %>%
+  group_by(purpose) %>% 
+  ggplot() +
+  aes(y = (purpose/sum(purpose)), fill = defaulted) +
   geom_bar()
 
 # shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
