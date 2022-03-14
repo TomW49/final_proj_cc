@@ -401,7 +401,7 @@ loans_cleaned %>%
   count(fico_range_high) %>% 
   ggplot() +
   aes(x = fico_range_high, y = n, colour = defaulted) +
-  geom_line()
+  geom_line() 
 ```
 
 
