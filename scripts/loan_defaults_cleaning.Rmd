@@ -12,6 +12,7 @@ library(broom)
 library(pROC)
 library(modelr)
 library(caret)
+library(gghighlight)
 ```
 
 # Reading in data
@@ -230,19 +231,31 @@ loans_cleaned %>%
   summarise(Count = n(), percentage = Count/nrow(loans_cleaned))
 ```
 
+### Mean/median number of loans per state
+```{r}
+# 847.4
+default_rate_per_state %>%
+  summarise(mean(count))
+
+# 463.5
+default_rate_per_state %>%
+  summarise(median(count))
+```
+
 # Graphs
 ### Graph Theme
 ```{r}
 lc_theme <- function(){
-  theme(panel.background = element_rect(fill = "grey15"),
-        legend.key = element_rect(fill = "grey15"),
+  theme(panel.background = element_rect(fill = "ghostwhite"),
+        legend.key = element_rect(fill = "#0047b3"),
         panel.border = element_blank(),
-        panel.grid.major = element_line(color = "grey25"),
+        panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         legend.position = "none",
         axis.title = element_text(face = "bold"),
         plot.title = element_text(face = "bold")
-  )
+  ) +
+    theme_minimal(base_size = 14)
 }
 # dodgerblue4
 # firebrick3
@@ -257,7 +270,6 @@ lc_theme <- function(){
 # total ratio of defaulted per state
 default_rate_per_state <- loans_cleaned %>%
   group_by(state_name) %>%
-  mutate(state_name = as.character(state_name)) %>% 
   summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
   arrange(desc(defaulted_rate))
 
@@ -268,7 +280,7 @@ default_rate_per_state %>%
   choroplethr::state_choropleth(title = "Default Rate Per State")
 ```
 
-### Location of cusotmers who have charged off on loans and initiated recoveries from LC
+### Barchart - Total LendingClub Loans Per State
 ```{r}
 # proportional to state size
 # note, cal has 1	California	39,538,223
@@ -277,39 +289,74 @@ default_rate_per_state %>%
 # 4	New York	- 20,201,249
 
 # total LC loans by state
+top5_states <- loans_cleaned %>% 
+  count(state_name, sort = T) %>% 
+  slice(1:5) 
+
 loans_cleaned %>% 
-  group_by(state_name) %>% 
-  summarise(count = n()) %>% 
+  count(state_name) %>% 
   ggplot() +
-  aes(x = count, y = reorder(state_name, count, fill = "#0047b3", position = "dodge")) +
-  geom_col() +
+  aes(x = n, y = reorder(state_name, n)) +
+  geom_col(fill = "dodgerblue4") +
   lc_theme() +
-  ggtitle( "Total LendingClub Loans Per State",
-          subtitle = "Between 2007 - 2011") +
-  xlab("Loans") +
-  ylab("States")
-
-# total defaulted loans by state 
-loans_cleaned %>% 
-  filter(defaulted == "Yes") %>% 
-  group_by(state_name) %>% 
-  summarise(count = n()) %>% 
-  ggplot() +
-  aes(x = count, y = reorder(state_name, count)) +
-  geom_col()
-
-# shows Nebraska has highest default rate although small proportion
-loans_cleaned %>%
-  group_by(state_name) %>%
-  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
-  arrange(desc(defaulted_rate)) %>% 
-  ggplot() +
-  aes(x = defaulted_rate, y = reorder(state_name, defaulted_rate)) +
-  geom_col() +
-  scale_x_continuous(limits =c (0, 1))
+  labs( 
+    title = "Total LendingClub Loans Per State",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "States") +
+  gghighlight(n >= min(top5_states$n))
 ```
 
-### looking at volume within loan status categories
+### Barchart - Total Defaulted LendingClub Loans Per State
+```{r}
+# total defaulted loans by state 
+top5_defaulted_states <- loans_cleaned %>% 
+  filter(defaulted == "Yes") %>% 
+  count(state_name, sort = T) %>% 
+  slice(1:5) 
+
+loans_cleaned %>% 
+  filter(defaulted == "Yes") %>% 
+  count(state_name, sort = T) %>% 
+  ggplot() +
+  aes(x = n, y = reorder(state_name, n)) +
+  geom_col(fill = "firebrick3") +
+  lc_theme() +
+  labs( 
+    title = "Total Defaulted LendingClub Loans Per State",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "States") +
+  gghighlight(n >= min(top5_defaulted_states$n))
+```
+
+### Barchart - Ratio of Defaulted LendingClub Loans Per State(highlighting top 5 states above avg loan count)
+```{r}
+# taking top 5 states with highest default rate with a count more than the average amnt of loans per state
+# mean number of loans per state 847.4	
+top5_defaulted_states_mean_loans <- default_rate_per_state %>% 
+  filter(count > mean(count)) %>% 
+  arrange(desc(defaulted_rate)) %>%
+  slice(1:5) 
+
+# shows Nebraska has highest default rate although small proportion
+
+default_rate_per_state %>% 
+  ggplot() +
+  aes(x = defaulted_rate, y = reorder(state_name, defaulted_rate)) +
+  geom_col(fill = "grey82") +
+  scale_x_continuous(limits =c (0, 1)) +
+  lc_theme() +
+  labs( 
+    title = "Ratio of Defaulted LendingClub Loans Per State",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "States") +
+  geom_col(data = top5_defaulted_states_mean_loans, fill = "firebrick3") +
+  theme_minimal(base_size = 14) 
+```
+
+### Barchart - looking at volume within loan status categories
 ```{r}
 # looking at volume within loan status categories
 loans_cleaned %>% 
@@ -332,7 +379,8 @@ loans_cleaned %>%
 
 # counting purpose of loan types
 loans_cleaned %>% 
-  count(purpose, sort = T)
+  count(purpose, sort = T) %>% 
+  knitr::kable()
 
 # types of p2p loans over time
 loans_cleaned %>% 
