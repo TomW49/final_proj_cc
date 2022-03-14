@@ -13,91 +13,17 @@ library(pROC)
 library(modelr)
 library(caret)
 library(gghighlight)
+library(here)
 ```
 
-# Reading in data
+# Reading in cleaned data
 ```{r}
-# loading data
-loans <- read_csv("../data/lending_club_loans.csv")
-grades <- read_csv("../data/grade_info.csv")
-states_info <- read_csv("../data/state_names_info.csv")
+loans_cleaned <- read_csv("../data/loans_cleaned.csv")
 ```
 
-# Joining df's
-```{r}
-# joining df's
-loans <- loans %>% 
-  rename(state_abb = addr_state) %>% 
-  left_join(states_info, by = "state_abb") %>% 
-  left_join(grades, by = "sub_grade") %>% 
-  clean_names() 
-
-rm(states_info, grades)
-```
-
-# Cleaning
-```{r}
-# investigating data
-summary(loans)
-
-# checking na's
-loans %>% 
- summarise(across(.fns = ~ sum(is.na(.x))))
-
-# removing / coalesce na's / tidy up
-# remove na's from tax_liens - 148 na's - this also removes 29 consistent NA's
-# remove na's from revol_util - 93 na's
-# new col, classing loan defaulted if late, charged off or defaulted
-# change na's to -1 mths_since_last_delinq + mths_since_last_record as cust have never had both
-# change na's to -1 as customers appear to never have had a number of defaults
-# changing date var from chr to date
-# discovered North Dakota was the NA' value, so changed 
-# changed chr cols to factor for model
-loans_cleaned <- loans %>%
-  filter(if_all(c(id, tax_liens, revol_util), ~ !is.na(.))) %>%
-  mutate(defaulted = if_else(  
-    loan_status %in% c("Charged Off",
-                       "Does not meet the credit policy. Status:Charged Off",
-                       "Late (31-120 days)",
-                       "Late (16-30 days)",
-                       "Default"), "Yes", "No"), 
-    .after = loan_status) %>% 
-  mutate(mths_since_last_delinq = coalesce(mths_since_last_delinq, -1),
-         mths_since_last_record = coalesce(mths_since_last_record, -1),
-         pub_rec_bankruptcies = coalesce(pub_rec_bankruptcies, -1)) %>% 
-  mutate(issue_d = my(issue_d),       
-         earliest_cr_line = my(earliest_cr_line)) %>% 
-  mutate(state_name = coalesce(state_name, "North Dakota")) %>% 
-  mutate(int_rate = as.numeric(str_remove_all(int_rate, "[%]")),
-         term = as.numeric(str_remove_all(term, "[a-z]")),
-         zip_code = as.numeric(str_remove_all(zip_code, "[a-z]"))) %>% 
-  mutate_if(is_character, as_factor)
-
-
-# na's remain in emp_title, desc, title, next_pymnt_d, last_pymnt_d, collections_12_mths_ex_med, mths_since_last_major_derog, chargeoff_within_12_mths - more however they are full of NA's (will remove later)
-loans_cleaned %>% 
- summarise(across(.fns = ~ sum(is.na(.x))))
-```
-
-```{r}
-# remove chargeoff_within_12_mths as 42390 - 0, 149 - NA
-```   
-
-```{r}
-#loans %>% 
-#  distinct(emp_length)
-
-# turning emo_length into numerical
-#loans %>% 
-#  select(emp_length) %>% 
-#  mutate(emp_length = recode(emp_length, "10+ years" = "10", "< 1 year" = "0.92")) %>% 
-#  mutate(emp_length = as.numeric(str_remove_all(emp_length, "[a-z]"))) 
-```
-
-# Splitting data into background_check data
+# Splitting data into background_check data 
 ```{r}
 # selecting vars used during the background checks of customer
-
 background_checks <- loans_cleaned %>% 
   select(c(defaulted,
            verification_status, # category - verified income
@@ -113,66 +39,15 @@ background_checks <- loans_cleaned %>%
            revol_bal, # dbl - Total credit revolving balance  unpaid credit at the end of a billing cycle
            revol_util, # chr - %, amount of credit the borrower is using relative to all available revolving credit
            total_acc, # dbl - The total number of credit lines currently in the borrower's credit file
-           open_rv_12m, # boolean - number of revolving credit cards <12mths, full of NA
-           open_rv_24m, ## boolean - number of revolving credit cards <24mths, full of NA
-           max_bal_bc, # boolean - Maximum current balance owed on all revolving accounts, full of NA
-           all_util, # boolean - Balance to credit limit on all trades
-           total_rev_hi_lim, # boolean - Total revolving high credit/credit limit, full of NA
-           inq_fi, # boolean - Number of personal finance inquiries, full of NA
-           total_cu_tl, # boolean - Number of finance trades, full of NA
-           inq_last_12m, # boolean - Number of credit inquiries in past 12 months, full of NA
-           acc_open_past_24mths, # boolean -  Number of trades opened in past 24 months, full of NA
-           avg_cur_bal, # boolean - Average current balance of all accounts, full of NA
-           bc_open_to_buy, # boolean - Total open to buy on revolving bankcards, full of NA
-           bc_util, # boolean - Ratio of total current balance to high credit/credit limit for all bankcard accounts, full of NA
-           chargeoff_within_12_mths, # dbl - Number of charge-offs within 12 months, 0 for all obs
-           delinq_amnt, # dbl - The past-due amount owed for the accounts on which the borrower is now delinquent, 6053 + 27, 0
-           mo_sin_old_il_acct, # boolean - Months since oldest bank installment account opened, full of NA
-           mo_sin_old_rev_tl_op, # boolean - Months since oldest revolving account opened, full of NA
-           mo_sin_rcnt_rev_tl_op, # boolean - Months since most recent revolving account opened, full of NA
-           mo_sin_rcnt_tl, # boolean - Months since most recent account opened, full of NA
-           mort_acc, # boolean - Number of mortgage accounts, full of NA
-           mths_since_recent_bc, # boolean - Months since most recent bankcard account opened, full of NA
-           mths_since_recent_bc_dlq, # boolean - Months since most recent bankcard delinquency, full of NA
-           mths_since_recent_inq, # boolean - Months since most recent inquiry.
-           mths_since_recent_revol_delinq, # boolean - Months since most recent revolving delinquency, full of NA
-           num_accts_ever_120_pd, # boolean - Number of accounts ever 120 or more days past due, full of NA
-           num_actv_bc_tl, # boolean - 	Number of currently active bankcard accounts, full of NA
-           num_actv_rev_tl, # boolean - 	Number of currently active revolving trades, full of NA
-           num_bc_sats, # boolean -  Number of satisfactory bankcard accounts, full of NA
-           num_bc_tl, # boolean -  Number of bankcard accounts, full of NA
-           num_il_tl, # boolean -  Number of installment accounts, full of NA
-           num_op_rev_tl, # boolean -  Number of open revolving accounts, full of NA
-           num_rev_accts, # boolean - 	Number of revolving accounts, full of NA
-           num_rev_tl_bal_gt_0, # boolean -	Number of revolving trades with balance >0, full of NA
-           num_sats, # boolean - Number of satisfactory accounts, full of NA
-           num_tl_120dpd_2m, # boolean - Number of accounts currently 120 days past due (updated in past 2 months), full of NA
-           num_tl_30dpd, # boolean - Number of accounts currently 30 days past due (updated in past 2 months), full of NA
-           num_tl_90g_dpd_24m, # boolean - Number of accounts 90 or more days past due in last 24 months, full of NA
-           num_tl_op_past_12m, # boolean - Number of accounts opened in past 12 months, full of NA
-           open_acc_6m,
-           open_acc_6m,
-           open_il_12m,
-           open_il_24m,
-           open_il_6m,
-           mths_since_rcnt_il, 
-           total_bal_il, 
-           il_util,
-           pct_tl_nvr_dlq,
+           delinq_amnt, # dbl - The past-due amount owed for the accounts on which the borrower is now delinquent, 
            pub_rec_bankruptcies,
-           tax_liens,
-           tot_hi_cred_lim,
-           total_bal_ex_mort,
-           )) 
+           fico_range_low,
+           fico_range_high
+  )) 
 
-# removing variables that are only NA
-background_checks_trimmed <- background_checks %>%
-  select_if(~ !all(is.na(.)))
-
-# recoveries shows that a charge off has been made, ie deceleration debt is unlikely to be collected, normally at 6 months of no pay
 ```
 
-# Splitting data into onramp_data 
+# Splitting data into onramp_data
 ```{r}
 # selecting vars used during on ramp phase of delivering loans
 # not including funded/inv due to no use
@@ -187,7 +62,6 @@ onramp_data  <- loans_cleaned %>%
            emp_title, # chr - not really useful
            emp_length, # chr - years, should turn to factor and use as bins/dummy
            home_ownership, # chr - binned
-           annual_inc, # dbl
            issue_d,
            loan_status,
            pymnt_plan, # chr - turn logical
@@ -198,28 +72,18 @@ onramp_data  <- loans_cleaned %>%
            state_name, # chr - turn to factor, no need for abbreviated var
            fico_range_low,
            fico_range_high, 
-           application_type, # chr - should bin solo or co-borrower - all IND, some NA
-           annual_inc_joint, # remove as all na
-           dti_joint, # remove as all na
-           verification_status_joint, # remove as all na
-           tot_coll_amt, # remove as all na
-           tot_cur_bal, # remove as all na
-           open_acc_6m, # remove as  as all 
-           open_acc_6m, # remove as all na
-           open_il_12m, # remove as all na
-           open_il_24m, # remove as all na
-           open_il_6m, # remove as all na
-  ))
+  )) 
 
-# removing variables that are only NA
-onramp_data_trimmed <- onramp_data %>%
-  select_if(~ !all(is.na(.)))
+# -----------------------------------------------------------------------------#
 
 # removing user entered text data & loan_status as created flag, & pymnt_plan as all n bar 1
 # removing fico_range_low to have a higher tolerance for credit rate
 # removing application_type as they are all individual
-onramp_data_trimmed  <- onramp_data_trimmed %>% 
-   select(-c(emp_title, desc, title, loan_status, pymnt_plan, fico_range_low, application_type))
+
+# onramp_data_trimmed  <- onramp_data_trimmed %>% 
+#  select(-c(emp_title, desc, title, loan_status, pymnt_plan, fico_range_low, application_type))
+
+# -----------------------------------------------------------------------------#
 ```
 
 # Stats
@@ -231,8 +95,13 @@ loans_cleaned %>%
   summarise(Count = n(), percentage = Count/nrow(loans_cleaned))
 ```
 
-### Mean/median number of loans per state
+### Mean/median number of loans per state + Ration of defaulter per state
 ```{r}
+# total ratio of defaulted per state
+default_rate_per_state <- loans_cleaned %>%
+  group_by(state_name) %>%
+  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
+  arrange(desc(defaulted_rate))
 # 847.4
 default_rate_per_state %>%
   summarise(mean(count))
@@ -266,13 +135,6 @@ lc_theme <- function(){
 ```{r}
 # str to lower to match mapping library
 # creating map
-
-# total ratio of defaulted per state
-default_rate_per_state <- loans_cleaned %>%
-  group_by(state_name) %>%
-  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
-  arrange(desc(defaulted_rate))
-
 default_rate_per_state %>% 
   select(state_name, defaulted_rate) %>%
   rename(region = state_name, value = defaulted_rate) %>% 
@@ -352,20 +214,42 @@ default_rate_per_state %>%
     subtitle = "Between 2007 - 2011",
     x = "Loans",
     y = "States") +
-  geom_col(data = top5_defaulted_states_mean_loans, fill = "firebrick3") +
-  theme_minimal(base_size = 14) 
+  geom_col(data = top5_defaulted_states_mean_loans, fill = "firebrick3")
 ```
 
-### Barchart - looking at volume within loan status categories
+### Barchart - Volume of LendingClub Loan Catagories
 ```{r}
+# showing types of loan status
+loans_cleaned %>% 
+  group_by(loan_status) %>% 
+  count(loan_status, sort = T) 
+
 # looking at volume within loan status categories
 loans_cleaned %>% 
+  count(loan_status) %>% 
   ggplot() +
-  aes(y = loan_status) +
-  geom_bar()
+  aes(y = reorder(loan_status, n),  x = n) +
+  geom_col(fill = "dodgerblue4") +
+  lc_theme() +
+  labs( 
+    title = "Volume of LendingClub Loan Catagories",
+    subtitle = "Between 2007 - 2011",
+    x = "",
+    y = "") +
+  geom_text(aes(label = n), hjust = -0.1, vjust = 0) +
+  theme(axis.text.y = element_text(colour  = c('firebrick3',
+                                            'firebrick3', 
+                                            'firebrick3',
+                                            'grey50',
+                                            'grey50',
+                                            'firebrick3',
+                                            'grey50',
+                                            'firebrick3',
+                                            'grey50'),
+                                   face = "bold"))
 ```
 
-### †ypes of p2p loans over time
+### Linegraph: †ypes of p2p loans over time
 ```{r}
 #-------------------------------
 # data from mid 2007 - end 2011
@@ -389,25 +273,16 @@ loans_cleaned %>%
   ggplot() +
   aes(x = issue_d, y = count, colour = purpose) +
   geom_line() 
-  
 #---------------------------
 ```
 
 ### plot showing volume of negative vs positive loan status
 ```{r}
-# showing types of loan status
-loans_cleaned %>% 
-  group_by(loan_status) %>% 
-  count(loan_status, sort = T) 
-
-# volume of negatively attributed loans
-loans_cleaned %>% 
-  count(defaulted, sort = T)
-
-# plot showing volume of negative vs positive loan status
-loans_cleaned %>% 
-  as.factor(defaulted) %>%  
-  aes(y = purpose, fill = defaulted ) +
+# plot showing volume of negative vs positive loan status ratio no/yes
+loans_cleaned %>%
+  group_by(purpose, defaulted) %>% 
+  ggplot() +
+  aes(y = purpose, fill = defaulted) +
   geom_bar()
 
 # shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
@@ -483,6 +358,20 @@ mod2_1pred_annual_inc <- glm(defaulted ~ annual_inc,
 mod3_1pred_purpose <- glm(defaulted ~ purpose, 
                                   data = onramp_data_trimmed, 
                                   family = binomial(link = 'logit'))
+
+# combined model
+mod5_1pred_combined <- glm(defaulted ~ .,
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+clean_names(tidy(mod5_1pred_combined))
+
+# creating null
+null_model <- glm(defaulted ~ 1,
+                  data = onramp_data_trimmed,
+                  family = binomial(link = 'logit'))
+
+anova(mod5_1pred_combined, null_model, test = "Chisq")
+
 
 # all p-values are below 0, so tests are significant 
 clean_names(tidy(mod1_1pred_term))
