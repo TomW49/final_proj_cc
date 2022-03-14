@@ -42,7 +42,7 @@ This project will use R with R Studios, along with Git/Git Hub for version contr
 
 * state\_names_info.csv - expands on state abbreviations that are found in the main data set
 
-**scripts** - these are any cleaning scripts used on the data for awareness of the user.
+**scripts** - these are any cleaning scripts used on the data for awareness of the user. Also houses my analysis script that contains all of the EDA and plots.
 
 ## Features/packages
 
