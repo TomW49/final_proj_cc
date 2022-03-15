@@ -102,7 +102,7 @@ loans_cleaned %>%
              "pipe")
 ```
 
-### Mean/median number of loans per state + Ration of defaulter per state RESULTS - GEOGRAPHY
+### Mean/median number of loans per state + Ratio of defaulted per state RESULTS - GEOGRAPHY
 ```{r}
 # total ratio of defaulted per state
 default_rate_per_state <- loans_cleaned %>%
@@ -388,11 +388,24 @@ loans_cleaned %>%
                   "Number of Defaults"),
     "pipe")
 
+# default rates per purpose
+default_rate_per_purpose <- loans_cleaned %>%
+  group_by(purpose) %>%
+  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
+  arrange(desc(defaulted_rate))
+
+# Top 5 purpose with highest default rate
+default_rate_per_purpose %>% 
+  summarise(purpose, count, defaulted_rate = round(defaulted_rate*100, 2)) %>% 
+  slice(1:5)
+
 # shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
 loans_cleaned %>% 
   filter(purpose == "other") %>% 
   summarise(desc)
 ```
+
+#------------------------------------------------------------------------------#
 
 ### Linegraph - Fico_range_high
 ```{r}
@@ -400,10 +413,9 @@ loans_cleaned %>%
   group_by(fico_range_high, defaulted) %>% 
   count(fico_range_high) %>% 
   ggplot() +
-  aes(x = fico_range_high, y = n, colour = defaulted) +
-  geom_line() 
+  aes(x = fico_range_high, y = n, fill = defaulted) +
+  geom_col()
 ```
-
 
 # LogReg Model
 ```{r}
