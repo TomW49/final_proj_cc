@@ -427,14 +427,30 @@ loans_cleaned %>%
 
 #------------------------------------------------------------------------------#
 
-### Linegraph - Fico_range_high
+### Linegraph - Fico_range_low RESULTS - FICO RANGE 
 ```{r}
+# as the lower end of the fico range increases so does the amount of defaulted loans,
+# it shows an uneven bell curve being skewed to the right, 65 - 685 fico range low has the highest amount of defaults, then drops off in terms of number of defaults
 loans_cleaned %>% 
-  group_by(fico_range_high, defaulted) %>% 
-  count(fico_range_high) %>% 
+  group_by(fico_range_low, defaulted) %>% 
+  filter(defaulted == "Yes") %>% 
+  count(fico_range_low, sort = T) %>% 
+  arrange(fico_range_low)
+
+loans_cleaned %>% 
+  group_by(fico_range_low, defaulted) %>% 
+  count(fico_range_low, sort = T) %>% 
   ggplot() +
-  aes(x = fico_range_high, y = n, fill = defaulted) +
-  geom_col()
+  aes(x = fico_range_low, y = n, colour = defaulted) +
+  geom_line() +
+    lc_theme() +
+  labs( 
+    title = "FICO Score of customers defaulting on loans ",
+    subtitle = "Between 2007 - 2011",
+    x = "FICO score",
+    y = "Volume of customers",
+    colour = "Defaulted") +
+  scale_colour_discrete(limits = c("Yes", "No"))
 ```
 
 # LogReg Model
