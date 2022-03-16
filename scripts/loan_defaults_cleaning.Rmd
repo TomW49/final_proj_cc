@@ -433,10 +433,11 @@ loans_cleaned %>%
 # it shows an uneven bell curve being skewed to the right, 65 - 685 fico range low has the highest amount of defaults, then drops off in terms of number of defaults
 loans_cleaned %>% 
   group_by(fico_range_low, defaulted) %>% 
-  filter(defaulted == "Yes") %>% 
+  filter(defaulted == "No") %>% 
   count(fico_range_low, sort = T) %>% 
   arrange(fico_range_low)
 
+# FICO score line graph
 loans_cleaned %>% 
   group_by(fico_range_low, defaulted) %>% 
   count(fico_range_low, sort = T) %>% 
@@ -450,7 +451,23 @@ loans_cleaned %>%
     x = "FICO score",
     y = "Volume of customers",
     colour = "Defaulted") +
-  scale_colour_discrete(limits = c("Yes", "No"))
+  scale_colour_discrete(limits = c("Yes", "No"))+
+  scale_x_continuous(breaks=seq(600, 830,10))
+
+# FICO sratio bar chart
+loans_cleaned %>%
+  ggplot(aes(x = fico_range_low, fill = defaulted)) +
+  geom_bar(position = "fill") +
+      lc_theme() +
+  labs( 
+    title = "Ratio of FICO Scores defaulting on loans ",
+    subtitle = "Between 2007 - 2011",
+    x = "FICO score",
+    y = "Ration of defaults",
+    fill = "Defaulted") +
+  scale_colour_discrete(limits = c("Yes", "No")) +
+  scale_x_continuous(breaks=seq(600, 830,10)) +
+  theme(axis.text.x = element_text(angle=45))
 ```
 
 # LogReg Model
