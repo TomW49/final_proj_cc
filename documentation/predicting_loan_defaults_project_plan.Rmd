@@ -1,0 +1,133 @@
+---
+title: "Documentation: Predicting Loan Defaults"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    pdf_document: default
+  word_document:
+    toc: yes
+---
+
+# Context
+
+#### Business intelligence and data-driven decision making, PDA 1.1
+
+Due to the nature of the business and the business question asked the analysis can provide instant actionable insights. The end product describes a typical profile of a customer who may likely default on their loan payments and by proxy this will provide profiles of *safer* customers likely to pay back any money received. This will ultimately allow the business to prevent any profit loss while simultaneously maximising profit from reliable customers.
+
+
+
+#### Domain knowledge and the business context, PDA 1.2/4.7
+
+Below is the brief provided, which acts as the basis of the project.
+
+> "You've been hired by LendingClub, an online loan provider to help with some problems their business has been facing. <br> <br>They are concerned about the default rate on their loans. They want to understand who is likely to default and who they should lend to in the future."
+
+Extracted from this, my main effort is onefold - provide evidence that highlights the customer profile of those most likely to default on their loan as provided by LendingClub.
+
+LendingClub are a peer-to-peer lending company based in California who are the facilitators in setting up loans between investors and consumers. If they can identify a customer who is less likely to default, they will be able to increase their profit margins and conversely by targeting those customers.
+
+## Data
+
+#### Internal and external data sources, PDA 1.4
+
+-   `grade_info.csv`: Internal, provides information regarding LendingClubs customer grading
+-   `lending_club_loans.csv`:  Internal, is the main data set, contains all information regarding the business and it's customers
+-   `state_names_info.csv`: External, provides full names of abbreviated state names that are found in the main data set
+
+#### Types of data, 2.2
+
+What kind of data did you work with? E.g. categorical and numerical data and their sub-types.
+
+Within the data set, predominant data types and examples are as follows:
+
+| Variable            | Type        | Sub-type | Example Data |
+|---------------------|-------------|----------|--------------|
+| loan_amnt           | Numerical   | dbl      | 7500         |
+| payment_plan        | Categorical | chr      | y            |
+| initial_list_status | Boolean     | lgl      | FALSE        |
+| issue_d             | Date        | chr      | Dec-2011     |
+
+#### Data formats, PDA 2.3
+
+The data formats used were flat files as provided by the organisation.
+
+#### Data quality and bias, PDA 1.5/2.6
+
+There was varying data types in the data as seen above, however there was a high volume of missing values. After cleaning the data of them I almost halved the amount of variables in the data set from 116 to 63. The observations were not affected as much as before cleaning I had 42,538 to the 42,370 after cleaning. I spent a lot of time using an .xlxs file containing a dictionary to the variables to understand the data in preparation for model building as the titles were abbreviated and contained a lot of financial jargon.
+
+There was no immediate bias observed as the data had customer profiles representing all American states from varying incomes, home ownership and employments. What I did discover though was a disproportionate volume of loans per state - however this turned out to be proportional to the population of te state.
+
+# Ethics
+
+#### Ethical issues in data sourcing and extraction, PDA 2.7
+
+The data set it open source on Kaggle.com however there appears to be a varying amount of data set, each with their own nuances. I was provided the data by CodeClan and as such extraction did not present any concerns. 
+
+Within the data there was some identifying variables. The only one that was redacted was `zip_code`, the others appeared to be place of work and a free text variable that showed the users own description of the loan, `desc`. After analysis of this variable some customers had provided some further identifying information however nothing of major concern.
+
+#### Ethical implications of business requirements, PDA 1.9
+
+The business requirement itself is asking to identify customers to possibly prevent getting a loan due to likelihood of defaulting on that loan. By proxy this is excluding individuals from their services. However, by taking this course of action LendingClub is not only protecting their business in terms of profit loss, but they are also protecting the consumer by preventing them from acquiring debt they are most likely unable to pay back in full. If a customer is in desperate need for a loan, they can approach the many other banks and lenders who would have lower tolerances for risk.
+
+# Analysis
+
+#### Stages in the data analysis process, PDA 1.6
+
+The approach to the project consisted of 4 main phases - EDA, Model Building and Insights Recommendations.
+
+The stages of data analysis where as follows:
+
+**Stage 1** - Define a defaulted loan by exploration of the data and online research
+
+**Stage 2** - Explore the relationships between defaulted loans and the other variables in the data set using plots
+
+**Stage 3** - Explore correlated data and begin decide which model to make
+
+**Stage 4** - Model creation 
+
+**Stage 5** - Model Testing
+
+**Stage 6** - Insights
+
+A reflective remark to make here is that although I believe a chose the correct model, the process I undertook did not yield me the results I had hoped for. In the end my model was not successful and as a contingency I relied on my initial EDA to guide me through basic analysis of the data in order to provide conclusions.
+
+#### Tools for data analysis, 1.10
+
+I used R with RStudio for all cleaning and analysis stages. I used MS PowerPoint to create the presentation detailing the insights.
+
+#### Descriptive, diagnostic, predictive and prescriptive analysis, PDA 1.7
+
+Please report under which of the below categories your analysis falls **and why** (can be more than one)
+
+My analysis falls into the below categories, which an explanation of what stage of the analysis it occurred in:
+
+**Descriptive Analytics**
+
+In order to better understand the journey of LendingCLub and their business I explored the volume of loan types over a date range from 2007 - 2011. This gave insights as to the most and least popular demands from consumers.
+
+**Predictive Analytics**
+
+Based on the relationships between the customers attributes and if they had defaulted on their loan or not, I looked created a profile of a customer who was more and least likely to default on their loan in the future. This was the intent of the logistical regression model however since that model failed I used basic relationships within the data set instead.
+
+# Insights
+
+#### PDA 4.7
+
+The detailed exploration and explanation of the results are contained within the project under `loan_defaults_analysis.rmd` and within the `loan_defaults_presentation.pptx`. An extremely lean summary of the actionable findings are as follows:
+
+##### The profile of a customer MOST likely to default on their loan
+
+* FICO Score: 665 - 680
+* Purpose:  Small Business, Educational Loans, Renewable energies
+* State: California, Maryland, Washington, Florida and Georgia 
+
+##### The profile of a customer LEAST likely to default on their loan
+
+* FICO Score: > 685 
+* Purpose:  Debt Consolidation, Credit Card, Home Improvement, Major Purchase
+* State:  New Jersey, Texas, New York, Pennsylvania,  Arizona, Ohio, Massachusetts, Virginia, Colorado, Illinois
+
+To conclude, for LendingClub to maximise profits they should target the profile of customers least likely to default by either promotional efforts or a higher rate of acceptance during the loan process as these customers are more likely to end up paying their loan back in full with interest. LendingClub should be aware of customers who are most likely to default, maybe increasing the tolerance of their screening and acceptance of customer profiles from this category. 
+
