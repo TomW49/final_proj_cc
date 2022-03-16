@@ -1,0 +1,692 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+# Libraries
+```{r}
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(GGally)
+library(broom)
+library(pROC)
+library(modelr)
+library(caret)
+library(gghighlight)
+```
+
+# Reading in cleaned data
+```{r}
+loans_cleaned <- read_csv("../data/loans_cleaned.csv")
+```
+
+# Splitting data into background_check data 
+```{r}
+# selecting vars used during the background checks of customer
+background_checks <- loans_cleaned %>% 
+  select(c(defaulted,
+           verification_status, # category - verified income
+           dti, # dbl - LC ratio on monthly debts/monthly income
+           delinq_2yrs,# dbl - The number of 30+  delinquency in the borrower's credit file for the past 2 years
+           earliest_cr_line, # dbl - The month the borrower's earliest reported credit line was opened
+           fico_range_low, # dbl - credit score at loan origin
+           inq_last_6mths, # dbl - The number of inquiries in past 6 months (excluding auto and mortgage inquiries)
+           mths_since_last_delinq, # dbl - The number of months since the borrower's last delinquency.(lc??)
+           mths_since_last_record, # The number of months since the last public record.
+           open_acc, # dbl - The number of open credit lines in the borrower's credit file.
+           pub_rec, # dbl - The number of open credit lines in the borrower's credit file.
+           revol_bal, # dbl - Total credit revolving balance  unpaid credit at the end of a billing cycle
+           revol_util, # chr - %, amount of credit the borrower is using relative to all available revolving credit
+           total_acc, # dbl - The total number of credit lines currently in the borrower's credit file
+           delinq_amnt, # dbl - The past-due amount owed for the accounts on which the borrower is now delinquent, 
+           pub_rec_bankruptcies,
+           fico_range_low,
+           fico_range_high
+  )) 
+
+```
+
+# Splitting data into onramp_data
+```{r}
+# selecting vars used during on ramp phase of delivering loans
+# not including funded/inv due to no use
+# using grade rather than sub for correlation affect
+onramp_data  <- loans_cleaned %>% 
+  select(c(defaulted,
+           loan_amnt,
+           term,
+           int_rate,
+           installment,
+           grade, # LC assigned loan subgrade, can use grade
+           emp_title, # chr - not really useful
+           emp_length, # chr - years, should turn to factor and use as bins/dummy
+           home_ownership, # chr - binned
+           issue_d,
+           loan_status,
+           pymnt_plan, # chr - turn logical
+           desc, # chr - text, no use
+           purpose, # chr - binned - turn to factor
+           title, # chr - user text to describe loan
+           zip_code, # chr - usefull for binning, redacted
+           state_name, # chr - turn to factor, no need for abbreviated var
+           fico_range_low,
+           fico_range_high, 
+  )) 
+
+# -----------------------------------------------------------------------------#
+
+# removing user entered text data & loan_status as created flag, & pymnt_plan as all n bar 1
+# removing fico_range_low to have a higher tolerance for credit rate
+# removing application_type as they are all individual
+
+# onramp_data_trimmed  <- onramp_data_trimmed %>% 
+#  select(-c(emp_title, desc, title, loan_status, pymnt_plan, fico_range_low, application_type))
+
+# -----------------------------------------------------------------------------#
+```
+
+#------------------------------------------------------------------------------#
+
+# Stats
+### Percentage of LC customers classified as defaulting RESULTS - DEFAULTS
+```{r}
+# about 15% of customers are either charged off, late > 16days or have defaulted
+loans_cleaned %>% 
+  group_by(defaulted) %>% 
+  summarise(Count = n(),
+            Percent = round((Count/nrow(loans_cleaned))* 100, 2)) %>% 
+  knitr::kable( 
+             caption = "Percentage of LendingClub customers classified as defaulting",
+             col.names = c("Defaulted", 
+                           "Count",
+                           "%"),
+             "pipe")
+```
+
+### Mean/median number of loans per state + Ratio of defaulted per state RESULTS - GEOGRAPHY
+```{r}
+# total ratio of defaulted per state
+default_rate_per_state <- loans_cleaned %>%
+  group_by(state_name) %>%
+  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
+  arrange(desc(defaulted_rate))
+
+# Top 5 states with highest default rate
+default_rate_per_state %>% 
+  summarise(state_name, count, defaulted_rate = round(defaulted_rate*100, 2)) %>% 
+  slice(1:5) %>% 
+  knitr::kable( 
+             caption = "Top 5 states with highest default rate",
+             col.names = c("State", 
+                           "Number of defaulted loans",
+                           "Defaulted Rate, %"),
+             "pipe")
+  
+# 847.4
+default_rate_per_state %>%
+  summarise(mean(count))
+
+# 463.5
+default_rate_per_state %>%
+  summarise(median(count))
+```
+
+#------------------------------------------------------------------------------#
+
+# Graphs
+### Graph Theme
+```{r}
+lc_theme <- function(){
+  theme(panel.background = element_rect(fill = "ghostwhite"),
+        legend.key = element_rect(fill = "#0047b3"),
+        panel.border = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        axis.title = element_text(face = "bold"),
+        plot.title = element_text(face = "bold")
+  ) +
+    theme_minimal(base_size = 14)
+}
+# dodgerblue4
+# firebrick3
+# ghostwhite
+```
+
+### Map showing rate of defaults across USA RESULTS - GEOGRAPHY
+```{r}
+# str to lower to match mapping library
+# creating map
+default_rate_per_state %>% 
+  select(state_name, defaulted_rate) %>%
+  rename(region = state_name, value = defaulted_rate) %>% 
+  mutate(region = str_to_lower(region)) %>% 
+  choroplethr::state_choropleth(title = "Default Rate Per State")
+```
+
+### Barchart - Total LendingClub Loans Per State RESULTS - GEOGRAPHY
+```{r}
+# proportional to state size
+# note, cal has 1	California	39,538,223
+# 2	Texas	- 29,145,505
+# 3	Florida	- 21,538,187
+# 4	New York	- 20,201,249
+
+# total LC loans by state
+top5_states <- loans_cleaned %>% 
+  count(state_name, sort = T) %>% 
+  slice(1:5) 
+
+loans_cleaned %>% 
+  count(state_name) %>% 
+  ggplot() +
+  aes(x = n, y = reorder(state_name, n)) +
+  geom_col(fill = "dodgerblue4") +
+  lc_theme() +
+  labs( 
+    title = "Total LendingClub Loans Per State",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "States") +
+  gghighlight(n >= min(top5_states$n))
+```
+
+### Barchart - Total Defaulted LendingClub Loans Per State RESULTS - GEOGRAPHY
+```{r}
+# total defaulted loans by state 
+top5_defaulted_states <- loans_cleaned %>% 
+  filter(defaulted == "Yes") %>% 
+  count(state_name, sort = T) %>% 
+  slice(1:5) 
+
+loans_cleaned %>% 
+  filter(defaulted == "Yes") %>% 
+  count(state_name, sort = T) %>% 
+  ggplot() +
+  aes(x = n, y = reorder(state_name, n)) +
+  geom_col(fill = "firebrick3") +
+  lc_theme() +
+  labs( 
+    title = "Total Defaulted LendingClub Loans Per State",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "States") +
+  gghighlight(n >= min(top5_defaulted_states$n))
+```
+
+### Barchart - Ratio of Defaulted LendingClub Loans Per State(highlighting top 5 states above avg loan count) RESULTS - GEOGRAPHY
+```{r}
+# taking top 5 states with highest default rate with a count more than the average amnt of loans per state
+# mean number of loans per state 847.4	
+top5_defaulted_states_mean_loans <- default_rate_per_state %>% 
+  filter(count > mean(count)) %>% 
+  arrange(desc(defaulted_rate)) %>%
+  slice(1:5) 
+
+# Top 5 states above average loan count with highest default rate
+default_rate_per_state %>% 
+  filter(count > mean(count)) %>% 
+  arrange(desc(defaulted_rate)) %>%
+  summarise(State = state_name, 
+            "Number of defaulted loans" = count,
+            "Defaulted Rate, %" = round(defaulted_rate*100, 2)) %>% 
+  slice(1:5) %>% 
+   knitr::kable(caption = "Top 5 states above average loan count with highest default rate")
+
+# Top 5 states with highest default rate
+# shows Nebraska has highest default rate although small proportion
+default_rate_per_state %>% 
+  arrange(desc(defaulted_rate)) %>%
+  summarise(State = state_name, 
+            "Number of defaulted loans" = count,
+            "Defaulted Rate, %" = round(defaulted_rate*100, 2)) %>% 
+  slice(1:5) %>% 
+   knitr::kable(caption = "Top 5 states with highest default rate")
+
+
+# States with lowest default rate that are above average loan count, 'Least likely to default on loans
+default_rate_per_state %>% 
+  filter(defaulted_rate < mean(defaulted_rate) & count > mean(count)) %>% 
+  arrange(defaulted_rate) %>%
+  summarise(State = state_name, 
+            "Number of defaulted loans" = count,
+            "Defaulted Rate, %" = round(defaulted_rate*100, 2)) %>% 
+ # slice(26:31) %>% 
+   knitr::kable(caption = "States with lowest default rate that are above average loan count, 'Least likely to default on loans'")
+  
+# states with highest default rate plot
+default_rate_per_state %>% 
+  ggplot() +
+  aes(x = defaulted_rate, y = reorder(state_name, defaulted_rate)) +
+  geom_col(fill = "grey82") +
+  scale_x_continuous(limits =c (0, 1)) +
+  lc_theme() +
+  labs( 
+    title = "Ratio of Defaulted LendingClub Loans Per State",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "States") +
+  geom_col(data = top5_defaulted_states_mean_loans, fill = "firebrick3")
+```
+
+#------------------------------------------------------------------------------#
+
+### Barchart - Volume of LendingClub Loan Catagories DATA
+```{r}
+# showing types of loan status
+loans_cleaned %>% 
+  group_by(loan_status) %>% 
+  count(loan_status, sort = T) 
+
+# looking at volume within loan status categories
+loans_cleaned %>% 
+  count(loan_status) %>% 
+  ggplot() +
+  aes(y = reorder(loan_status, n),  x = n) +
+  geom_col(fill = "dodgerblue4") +
+  lc_theme() +
+  labs( 
+    title = "Volume of LendingClub Loan Catagories",
+    subtitle = "Between 2007 - 2011",
+    x = "",
+    y = "") +
+  geom_text(aes(label = n), hjust = -0.1, vjust = 0) +
+  theme(axis.text.y = element_text(colour  = c('firebrick3',
+                                            'firebrick3', 
+                                            'firebrick3',
+                                            'grey50',
+                                            'grey50',
+                                            'firebrick3',
+                                            'grey50',
+                                            'firebrick3',
+                                            'grey50'),
+                                   face = "bold")) 
+```
+
+### Types of LendingClub Loans, 2007 - 2011 DATA 
+```{r}
+#-------------------------------
+# data from mid 2007 - end 2011
+
+# total volume of LC loans over time
+loans_cleaned %>% 
+  count(issue_d, sort = T) %>% 
+  ggplot() +
+  aes(x = issue_d, y = n) +
+  geom_line()
+
+# counting purpose of loan types
+loans_cleaned %>% 
+  count(purpose, sort = T) %>% 
+  summarise(Purpose = purpose, Count = n, 
+            Percent = round((Count/nrow(loans_cleaned))* 100, 2)) %>% 
+  knitr::kable()
+
+
+# types of p2p loans over time
+loans_cleaned %>% 
+  group_by(purpose, issue_d) %>% 
+  summarise(count = n()) %>% 
+  ggplot() +
+  aes(x = issue_d, y = count, colour = purpose) +
+  geom_line() +
+  lc_theme() +
+  labs( 
+    title = "Types of LendingClub Loans",
+    subtitle = "Between 2007 - 2011",
+    x = "",
+    y = "Volume",
+    colour = "Purpose")
+#---------------------------
+```
+
+#------------------------------------------------------------------------------#
+
+### Barplot showing volume of negative vs positive loan status RESULTS - PURPOSE
+```{r}
+# plot showing volume of negative vs positive loan status ratio no/yes
+loans_cleaned %>%
+  group_by(purpose, defaulted) %>% 
+  count(purpose) %>% 
+  ggplot() +
+  aes(y = reorder(purpose, n), 
+      x = n, 
+      fill = defaulted) +
+  geom_col() +
+  labs( 
+    title = "Volume of defaulted to non-defaulted loans per purpose",
+    subtitle = "Between 2007 - 2011",
+    x = "Loans",
+    y = "Purpose",
+    fill = "Defaulted") +
+  scale_fill_discrete(limits = c("Yes", "No")) +
+  theme(axis.text.y = element_text(colour  = c('firebrick3',
+                                               'grey50',
+                                               'firebrick3',
+                                               'grey50',
+                                               'grey50',
+                                               'grey50',
+                                               'dodgerblue4',
+                                               'dodgerblue4',
+                                               'firebrick3',
+                                               'dodgerblue4',
+                                               'dodgerblue4',
+                                               'grey50',
+                                               'dodgerblue4',
+                                               'grey50'),
+                                   face = "bold")) 
+
+# plot showing ratio of negative vs positive loan status ratio 
+loans_cleaned %>%
+  mutate(purpose = forcats::fct_reorder(.f = purpose, 
+                                         .x = defaulted,
+                                         .fun = function(.x) mean(.x == "Yes"),
+                                         .desc = F)) %>%
+  ggplot(aes(y = purpose, fill = defaulted)) +
+  geom_bar(position = "fill") +
+  lc_theme() +
+  labs( 
+    title = "Ratio of defaulted to non-defualted loans per purpose",
+    subtitle = "Between 2007 - 2011",
+    x = "Ratio",
+    y = "Purpose",
+    fill = "Defaulted") +
+  scale_fill_discrete(limits = c("Yes", "No"))
+
+# table for purpose volumes of defaults 
+loans_cleaned %>% 
+  filter(defaulted == "Yes") %>% 
+  count(purpose, sort = T) %>% 
+  knitr::kable( 
+    caption = "Volume of defaults per purpose",
+    col.names = c("Purpose", 
+                  "Number of Defaults"),
+    "pipe")
+
+# default rates per purpose
+default_rate_per_purpose <- loans_cleaned %>%
+  group_by(purpose) %>%
+  summarise(count = n(), defaulted_rate = sum(defaulted == "Yes") / n()) %>% 
+  arrange(desc(defaulted_rate))
+
+# Top 5 purpose with highest default rate
+default_rate_per_purpose %>% 
+  #filter(count > mean(count)) %>% 
+  summarise(purpose, 
+            count, 
+            defaulted_rate = round(defaulted_rate*100, 2)) %>% 
+  arrange(desc(defaulted_rate))
+  #slice(1:5)
+
+# shows that other category is a mixture of repaying debts, credit cards, repairs, building credit, for family members /friends
+loans_cleaned %>% 
+  filter(purpose == "other") %>% 
+  summarise(desc)
+```
+
+#------------------------------------------------------------------------------#
+
+### Linegraph - Fico_range_low RESULTS - FICO RANGE 
+```{r}
+# as the lower end of the fico range increases so does the amount of defaulted loans,
+# it shows an uneven bell curve being skewed to the right, 65 - 685 fico range low has the highest amount of defaults, then drops off in terms of number of defaults
+loans_cleaned %>% 
+  group_by(fico_range_low, defaulted) %>% 
+  filter(defaulted == "Yes") %>% 
+  count(fico_range_low, sort = T) %>% 
+  arrange(fico_range_low) 
+
+# FICO score line graph
+loans_cleaned %>% 
+  group_by(fico_range_low, defaulted) %>% 
+  count(fico_range_low, sort = T) %>% 
+  ggplot() +
+  aes(x = fico_range_low, y = n, colour = defaulted) +
+  geom_line() +
+    lc_theme() +
+  labs( 
+    title = "FICO Score of customers defaulting on loans ",
+    subtitle = "Between 2007 - 2011",
+    x = "FICO score",
+    y = "Volume of customers",
+    colour = "Defaulted") +
+  scale_colour_discrete(limits = c("Yes", "No"))+
+  scale_x_continuous(breaks=seq(600, 830,10))
+
+# FICO sratio bar chart
+loans_cleaned %>%
+  ggplot(aes(x = fico_range_low, fill = defaulted)) +
+  geom_bar(position = "fill") +
+  lc_theme() +
+  labs( 
+    title = "Ratio of FICO Scores defaulting on loans ",
+    subtitle = "Between 2007 - 2011",
+    x = "FICO score",
+    y = "Ration of defaults",
+    fill = "Defaulted") +
+  scale_fill_discrete(limits = c("Yes", "No")) + 
+  scale_x_continuous(breaks=seq(600, 830,10)) +
+  theme(axis.text.x = element_text(angle=45))
+```
+
+# LogReg Model
+```{r}
+library(caret)
+library(GGally)
+
+# correlation matrix
+loans_trim %>% 
+  select(c(inq_last_6mths, loan_amnt, loan_status_flag, fico_range_low, fico_range_high)) %>% 
+  ggcorr(label = T, layout.exp = 1)
+
+# scaling data 
+loans_data_scaled <- as.data.frame(scale(loan_trim))
+
+mod1 <- glm(loan_status_flag ~ inq_last_6mths,
+            data = loan_trim,
+            family = binomial((link = "logit")))
+
+summary(mod1)
+```
+
+### Setting up correlations
+```{r}
+# splitting df down to compare easily 
+split1 <- onramp_data_trimmed %>% 
+  select(defaulted, loan_amnt, term, int_rate, installment)
+
+split2 <-  onramp_data_trimmed %>% 
+  select(defaulted, grade, emp_length, home_ownership, annual_inc)
+
+split3<- onramp_data_trimmed %>% 
+  select(defaulted, issue_d, purpose, zip_code, state_name, fico_range_high)
+```
+
+### ggpairs()
+```{r}
+# defaulted + term(cat) > int_rate > loan_amnt 
+split1 %>% 
+  ggpairs()
+
+# defaulted + annual_inc(cont) > home_ownership > emp_length
+# b-grades are most likely to default
+# lower income customers are more likely to default
+split2 %>% 
+  ggpairs()
+
+# defaulted + fico_range_high(cat) > purpose (cat)
+split3 %>% 
+  ggpairs(cardinality_threshold = NULL)
+```
+
+### Creating models
+```{r}
+# categorical
+mod1_1pred_term <- glm(defaulted ~ term, 
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+
+# continuous
+mod2_1pred_annual_inc <- glm(defaulted ~ annual_inc, 
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+
+# categorical
+mod3_1pred_purpose <- glm(defaulted ~ purpose, 
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+
+# combined model
+mod5_1pred_combined <- glm(defaulted ~ .,
+                                  data = onramp_data_trimmed, 
+                                  family = binomial(link = 'logit'))
+clean_names(tidy(mod5_1pred_combined))
+
+# creating null
+null_model <- glm(defaulted ~ 1,
+                  data = onramp_data_trimmed,
+                  family = binomial(link = 'logit'))
+
+anova(mod5_1pred_combined, null_model, test = "Chisq")
+
+
+# all p-values are below 0, so tests are significant 
+clean_names(tidy(mod1_1pred_term))
+clean_names(tidy(mod2_1pred_annual_inc))
+clean_names(tidy(mod3_1pred_purpose))
+
+clean_names(glance(mod1_1pred_term))
+clean_names(glance(mod2_1pred_annual_inc))
+clean_names(glance(mod3_1pred_purpose))
+```
+
+### ROC curves
+```{r}
+onramp_data_trimmed_with_mod1 <- onramp_data_trimmed %>%
+  add_predictions(mod1_1pred_term, type = "response")
+
+onramp_data_trimmed_with_mod2 <- onramp_data_trimmed %>%
+  add_predictions(mod2_1pred_annual_inc, type = "response")
+
+onramp_data_trimmed_with_mod3 <- onramp_data_trimmed %>%
+  add_predictions(mod3_1pred_purpose, type = "response")
+
+roc_obj_mod1 <- onramp_data_trimmed_with_mod1  %>%
+  roc(response = defaulted, predictor = pred)
+
+roc_obj_mod2 <- onramp_data_trimmed_with_mod2  %>%
+  roc(response = defaulted, predictor = pred)
+
+roc_obj_mod3 <- onramp_data_trimmed_with_mod3  %>%
+  roc(response = defaulted, predictor = pred)
+
+roc_curve <- ggroc(
+  data = list(
+    mod1 = roc_obj_mod1, 
+    mod2 = roc_obj_mod2,
+    mod3 = roc_obj_mod3
+  ), 
+  legacy.axes = TRUE) +
+  coord_fixed()
+
+roc_curve
+
+# mod1 using term of loan seems out the bunch to be the best classifier as its "curve" is closest to the top left corner. Not really over the diagonal line for a random classifier for threshold values though...
+```
+
+```{r}
+auc(roc_obj_mod1)
+auc(roc_obj_mod2)
+auc(roc_obj_mod3)
+```
+
+### Cross validation, using a test and a train set
+```{r}
+train_control <- trainControl(method = "repeatedcv", 
+                              number = 5,
+                              repeats = 100,
+                              savePredictions = TRUE, 
+                              classProbs = TRUE, 
+                              summaryFunction = twoClassSummary)
+```
+
+```{r}
+mod1_1pred_term_cv <- train(mod1_1pred_term$formula,
+                                       data = onramp_data_trimmed,
+                                       trControl = train_control,
+                                       method = "glm",
+                                       family = binomial(link = 'logit'))
+```
+
+```{r}
+mod2_1pred_annual_inc_cv <- train(mod2_1pred_annual_inc$formula,
+                              data = onramp_data_trimmed,
+                              trControl = train_control,
+                              method = "glm",
+                              family = binomial(link = 'logit'))
+```
+
+```{r}
+mod3_1pred_purpose_cv <- train(mod3_1pred_purpose$formula,
+                           data = onramp_data_trimmed,
+                           trControl = train_control,
+                           method = "glm",
+                           family = binomial(link = 'logit'))
+```
+
+```{r}
+# near enough same AUC as when used on full data set - with one classifier hard to overfit
+mod1_1pred_term_cv$results
+mod2_1pred_annual_inc_cv$results
+mod3_1pred_purpose_cv$results
+```
+
+### Interpretation of the fitted coefficient with odds ratio
+```{r}
+coeff <- clean_names(tidy(mod1_1pred_term)) %>%
+  filter(term == "term") %>%
+  select(estimate)
+coeff
+```
+
+```{r}
+# this shows the odd of defaulting on a loan are increased by multiplication by a factor of 1.03
+odds_ratio <- exp(coeff * 1)
+odds_ratio
+```
+
+# Log Reg with all potential predictors
+```{r}
+mod4_all_preds <- glm(defaulted ~ ., 
+                      data = onramp_data_trimmed, 
+                      family = binomial(link = 'logit'))
+
+clean_names(tidy(mod4_all_preds)) %>%
+  select(term, p_value) %>%
+  filter(p_value > 0.05)
+```
+
+```{r}
+onramp_data_trimmed_with_mod4 <- onramp_data_trimmed %>%
+  add_predictions(mod4_all_preds, type = "response")
+
+roc_obj_mod4 <- onramp_data_trimmed_with_mod4  %>%
+  roc(response = defaulted, predictor = pred)
+
+ggroc(roc_obj_mod4) +
+  coord_fixed()
+
+# AUC and ROC curve could be better..
+auc(roc_obj_mod4)
+```
+
+```{r}
+# will not run
+mod4_all_preds_cv <- train(defaulted ~ .,
+                           data = onramp_data_trimmed,
+                           trControl = train_control,
+                           method = "glm",
+                           family = binomial(link = 'logit'))
+```
+
+
