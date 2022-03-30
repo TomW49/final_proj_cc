@@ -250,7 +250,7 @@ div.tocify {
 <h1>Context</h1>
 <div id="business-intelligence-and-data-driven-decision-making-pda-1.1" class="section level4">
 <h4>Business intelligence and data-driven decision making, PDA 1.1</h4>
-<p>Due to the nature of the business and the business question asked the analysis can provide instant actionable insights. The end product describes a typical profile of a customer who may likely default on their loan payments and by proxy this will provide profiles of <em>safer</em> customers likely to pay back any money received. This will ultimately allow the business to prevent any profit loss while simultaneously maximising profit from reliable customers.</p>
+<p>Due to the nature of the business and the business question itself, the analysis can provide instant actionable insights. The end product describes a typical profile of a customer who may likely default on their loan payments and by proxy this will provide a profile of a <em>safer</em> customer likely to pay back any money received, with interest. This will ultimately allow the business to prevent any profit loss from customers unable to pay back in full while simultaneously maximising profit from reliable customers.</p>
 </div>
 <div id="domain-knowledge-and-the-business-context-pda-1.24.7" class="section level4">
 <h4>Domain knowledge and the business context, PDA 1.2/4.7</h4>
@@ -273,7 +273,6 @@ div.tocify {
 </div>
 <div id="types-of-data-2.2" class="section level4">
 <h4>Types of data, 2.2</h4>
-<p>What kind of data did you work with? E.g. categorical and numerical data and their sub-types.</p>
 <p>Within the data set, predominant data types and examples are as follows:</p>
 <table>
 <thead>
@@ -319,7 +318,7 @@ div.tocify {
 <div id="data-quality-and-bias-pda-1.52.6" class="section level4">
 <h4>Data quality and bias, PDA 1.5/2.6</h4>
 <p>There was varying data types in the data as seen above, however there was a high volume of missing values. After cleaning the data of them I almost halved the amount of variables in the data set from 116 to 63. The observations were not affected as much as before cleaning I had 42,538 to the 42,370 after cleaning. I spent a lot of time using an .xlxs file containing a dictionary to the variables to understand the data in preparation for model building as the titles were abbreviated and contained a lot of financial jargon.</p>
-<p>There was no immediate bias observed as the data had customer profiles representing all American states from varying incomes, home ownership and employments. What I did discover though was a disproportionate volume of loans per state - however this turned out to be proportional to the population of te state.</p>
+<p>There was no immediate bias observed as the data had customer profiles representing all American states from varying incomes, home ownership and employments. What I did discover though was a disproportionate volume of loans per state - however this turned out to be proportional to the population of the state.</p>
 </div>
 </div>
 </div>
@@ -327,12 +326,12 @@ div.tocify {
 <h1>Ethics</h1>
 <div id="ethical-issues-in-data-sourcing-and-extraction-pda-2.7" class="section level4">
 <h4>Ethical issues in data sourcing and extraction, PDA 2.7</h4>
-<p>The data set it open source on Kaggle.com however there appears to be a varying amount of data set, each with their own nuances. I was provided the data by CodeClan and as such extraction did not present any concerns.</p>
+<p>The data set is open source on kaggle.com, however there appears to be a varying degree of data sets available, each with their own nuances. I was provided the data by CodeClan and as such extraction of the data set did not present any concerns.</p>
 <p>Within the data there was some identifying variables. The only one that was redacted was <code>zip_code</code>, the others appeared to be place of work and a free text variable that showed the users own description of the loan, <code>desc</code>. After analysis of this variable some customers had provided some further identifying information however nothing of major concern.</p>
 </div>
 <div id="ethical-implications-of-business-requirements-pda-1.9" class="section level4">
 <h4>Ethical implications of business requirements, PDA 1.9</h4>
-<p>The business requirement itself is asking to identify customers to possibly prevent getting a loan due to likelihood of defaulting on that loan. By proxy this is excluding individuals from their services. However, by taking this course of action LendingClub is not only protecting their business in terms of profit loss, but they are also protecting the consumer by preventing them from acquiring debt they are most likely unable to pay back in full. If a customer is in desperate need for a loan, they can approach the many other banks and lenders who would have lower tolerances for risk.</p>
+<p>The business question requires me to identify customers that the company should potentially exclude from their services. However, by taking this course of action LendingClub is not only protecting their business in terms of profit loss, but they are also protecting the consumer by preventing them from acquiring debt they are most likely unable to pay back in full. If a customer is in desperate need for a loan, they can approach the many other banks and lenders who would have lower tolerances for risk. Therefore, in my opinion there are no real ethical concerns here.</p>
 </div>
 </div>
 <div id="analysis" class="section level1">
@@ -360,7 +359,7 @@ div.tocify {
 <p><strong>Descriptive Analytics</strong></p>
 <p>In order to better understand the journey of LendingCLub and their business I explored the volume of loan types over a date range from 2007 - 2011. This gave insights as to the most and least popular demands from consumers.</p>
 <p><strong>Predictive Analytics</strong></p>
-<p>Based on the relationships between the customers attributes and if they had defaulted on their loan or not, I looked created a profile of a customer who was more and least likely to default on their loan in the future. This was the intent of the logistical regression model however since that model failed I used basic relationships within the data set instead.</p>
+<p>Based on the relationships between the attributes of the customer in relation to whether or not they had defaulted on their loan, I created profiles of a customer who was more and least likely to default on their loan in the future. This was the intent of the logistical regression model however since that model failed I used basic relationships within the data set instead.</p>
 </div>
 </div>
 <div id="insights" class="section level1">
